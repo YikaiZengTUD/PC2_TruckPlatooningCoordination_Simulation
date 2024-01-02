@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 # This is the class defination file for the geographical map
-
+from truck_parameter import Truck
 class GeoMap:
 
     def __init__(self,map_coord:dict) -> None:
@@ -9,8 +9,10 @@ class GeoMap:
         self._y_list = []
         self.build_map_from_coordinates(map_coord)
         self.task_dict_node = self.transfrom_task_list_to_hub_index(map_coord)
-        self.edge_set = self.collect_edge_table_from_hubdict(self.task_dict_node)
+        self.edge_list = self.collect_edge_table_from_hubdict(self.task_dict_node)
         
+        self.n_of_node = len(self._x_list)
+
     def collect_edge_table_from_hubdict(self,data:dict) -> set:
         edge_set = []
         for key_index in data.keys():
@@ -22,7 +24,7 @@ class GeoMap:
                     _this_origin      = _this_entry[itx-1]
                     _this_destination = item 
                     edge_set.append((_this_origin,_this_destination))
-        return set(edge_set)
+        return list(set(edge_set))
         
 
     def transfrom_task_list_to_hub_index(self,data:dict) -> dict:
@@ -80,7 +82,7 @@ class GeoMap:
         else:
             print('Error in finding node index [x], returning error')
             return -1
-                    
+          
 
 if __name__ == '__main__':
     
