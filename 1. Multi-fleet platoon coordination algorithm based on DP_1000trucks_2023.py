@@ -22,10 +22,10 @@ a=f.read()
 OD_hubs_dict=eval(a) # hubs between the origin and destination
 f.close()
 
-f=open('time_str_new_1000Trucks','r')
-a=f.read()
-time_str_ordered=eval(a) # ordered time sequence of each truck
-f.close()
+# f=open('time_str_new_1000Trucks','r')
+# a=f.read()
+# time_str_ordered=eval(a) # ordered time sequence of each truck
+# f.close()
 
 f=open('travel_dd_1000Trucks','r')
 a=f.read()

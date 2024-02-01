@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # In this file we define class and function of global information of all trucks
 import random
-from datetime import datetime
+from datetime import datetime,timedelta
 import networkx as nx
 
 class TruckSwarm:
@@ -11,6 +11,9 @@ class TruckSwarm:
         self.amount = n_of_truck
         self.task_set = task_set
         self.carrier_index_list = []
+        self.finished_counter = 0
+        if self.amount < 5000:
+            self.generate_virtual_random_truck_index()
 
     def init_communication_graph(self) -> None:
         self.commun_graph = nx.Graph()
@@ -41,9 +44,11 @@ class TruckSwarm:
         return ts_departure_time
     
     def assign_carrier_index(self,truck_index: int) -> int:
-        if not self.amount == 5000:
-            truck_index = random.randint(0, 4999)
-        i = truck_index
+        if self.amount == 5000:
+            i = truck_index
+        else:
+            i = self.random_index[self._random_index_pointer]
+            self._random_index_pointer += 1
         # vehicle 0-4999, fleet 1-855
         # small size fleet Type 1: where each fleet has only one truck (total: 325 trucks, f1-f325)
         if i>=0 and i<=324:
@@ -79,6 +84,25 @@ class TruckSwarm:
         if not f_i in self.carrier_index_list:
             self.carrier_index_list.append(f_i) # record all carrier index in this simulation
         return f_i
+
+            
+    def generate_virtual_random_truck_index(self):
+        # only in use for smaller data set in debugging
+        self.random_index = random.sample(range(5000),self.amount)
+        self._random_index_pointer = 0
+
+
+    def get_max_simulation_time(self,start_time_list:list,travel_time_dict:dict,waiting_budget:list) -> datetime:
+        for _truck_index,start_time in enumerate(start_time_list):
+            travel_duration_list = travel_time_dict[_truck_index]
+            travel_duration_all  = sum(travel_duration_list)
+            t_max = start_time + timedelta(seconds=(travel_duration_all)) + timedelta(seconds=waiting_budget[_truck_index])
+            if _truck_index == 0:
+                max_time = t_max
+            else:
+                if t_max > max_time:
+                    max_time = t_max
+        return max_time
 
         
 
