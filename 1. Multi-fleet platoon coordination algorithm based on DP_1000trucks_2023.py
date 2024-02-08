@@ -17,7 +17,7 @@ from Functions_2023 import v_decision_makers, v_arr_dep_hubs_update
 from DP_functions_Journal_2023 import data_td_groups, data_add_ta, remove_td_e, data_DP_graph_new, DMPC_DP_algorithm, Solution_org
 import copy
 
-f=open('OD_hubs_new_1000Trucks','r')
+f=open('data/OD_hubs_new_1000Trucks','r')
 a=f.read()
 OD_hubs_dict=eval(a) # hubs between the origin and destination
 f.close()
@@ -27,17 +27,17 @@ f.close()
 # time_str_ordered=eval(a) # ordered time sequence of each truck
 # f.close()
 
-f=open('travel_dd_1000Trucks','r')
+f=open('data/travel_dd_1000Trucks','r')
 a=f.read()
 t_extend_end_v=eval(a) # a dict, which includes the allowed total waiting time (seconds) of each truck in the whole trip
 f.close()
 
-f=open('OD_hubs_travel_1000Trucks','r')
+f=open('data/OD_hubs_travel_1000Trucks','r')
 a=f.read()
 OD_hubs_travel=eval(a) # travel times of different trucks on road segments
 f.close()
 
-f=open('vehicle_arr_dep_hubs0_1000Trucks','r') # the initial departure times from the origins 
+f=open('data/vehicle_arr_dep_hubs0_1000Trucks','r') # the initial departure times from the origins 
 a=f.read()
 vehicle_arr_dep_hubs0=eval(a)
 f.close()
