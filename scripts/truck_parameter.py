@@ -16,11 +16,7 @@ class Truck:
         
         # init a truck entity and each of them has an truck index and a node list to travel through
         self.node_list          = node_list         # This is the list of node that this truck must travel through
-
-        self.nexr_node_pointer  = 0                 # pointing which node is the next one
-
         self.carrier_index      = carrier_index     # which carrier does this truck belong to
-        
         self.truck_index        = truck_index
 
         self.start_time         = start_time
@@ -43,6 +39,11 @@ class Truck:
         self.current_edge       = -1
         self.last_node          = -1
         self.platooning_partener = [] # start with no partener
+
+        # platooning settings
+        self.t_cost     = 25/3600  # euro/seconds
+        self.t_travel   = 56/3600  # euro/seconds
+        self.xi         = 0.1 
 
     def __eq__(self, __value: object) -> bool:
         if isinstance(__value,Truck):
@@ -121,7 +122,7 @@ class Truck:
     def generate_depature_time_list(self) -> list:
         # return a list that contains datetime element of depature time at each hub
         depature_time = []
-        _d_time = self.start_time
+        _d_time = self.start_time + timedelta(seconds=60)
         for _node_index,_node in enumerate(self.node_list):
             if _node_index == 0:
                 _d_time = _d_time + timedelta(self.waiting_plan[_node_index])
@@ -147,12 +148,12 @@ class Truck:
     def answer_my_plan_at_hub(self,node_index:int) -> list:
         if node_index in self.node_list:
             self_node_order = self.node_list.index(node_index)
-            t_a = self.start_time
+            t_a = self.start_time + timedelta(seconds=60)
             for i in range(self_node_order):
                 t_a += timedelta(seconds=self.waiting_plan[i])
                 t_a += timedelta(seconds=self.travel_duration[i])
 
-            t_d = t_a + self.waiting_plan[self_node_order]
+            t_d = t_a + timedelta(seconds=self.waiting_plan[self_node_order])
             return [t_a,t_d]
         else:
             return [-1]
@@ -171,7 +172,6 @@ class Truck:
             print('%s: No concerned nodes found for this truck',str(self.truck_index))
             return []
     
-
     def generate_dp_graph(self,base_clk:datetime,synced_plan_from_carrier:list,time_resolution:int,prediction_range:int) -> None:
         
         # The dp graph, for this truck at this hub optimzation round
@@ -238,26 +238,118 @@ class Truck:
                         self.dp_graph.add_node(dp_node_id,time_d=t_d_this_hub,time_a=t_a_next_hub)
                         _temp.append(dp_node_id)
                         dp_node_id += 1
-            
-                    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     def get_deadline(self) -> datetime:
         return self.start_time + timedelta(seconds=sum(self.travel_duration) + self.waiting_buddget)
+
+    def answer_time_window_at_hub(self,hub_index:int,now_clk:datetime) -> list:
+        # this function is only called after generate incoming hubs, thus no past hubs will be checked here
+        # the earlist time is either right now or travel there without any stop
+
+        # also
+
+        if self.current_edge == -1:
+            # the truck is on a node
+            if self.current_node == hub_index:
+                t_e = now_clk + timedelta(seconds=60)
+                t_l = t_e + timedelta(seconds=self.waiting_buddget)
+            else:
+                i1 = self.node_list.index(self.current_node)
+                i2 = self.node_list.index(hub_index)
+                t_travel = sum(self.travel_duration[i1:i2])
+                t_e = now_clk + timedelta(seconds=t_travel)
+                t_l = t_e + timedelta(seconds=self.waiting_buddget)
+            return [t_e,t_l]
+        else:
+            # the truck is still travling
+            print('Error! This function can not handle when the truck is not arriving a hub')
+            return [-1]
+    
+    def caculate_dp_edge_weight(self,edge_now:int,agg_qty:int,ego_qty:int,wait_time:float) -> float:
+        
+        edge_order = self.edge_list.index(edge_now)
+        t_travel   = self.travel_duration[edge_order]
+        
+        cost_const = t_travel * self.t_cost + t_travel * self.t_travel
+        cost_wait  = wait_time * self.t_cost
+
+        if agg_qty == 0 and ego_qty == 0:
+            reward_of_carrier = 0
+        else:
+            agg_qty += 1
+            ego_qty += 1
+            reward_of_carrier = (((agg_qty - 1) * self.xi)/agg_qty) * ego_qty * self.t_travel * t_travel
+
+        cost_edge = cost_wait + cost_const - reward_of_carrier
+        if cost_edge < 0:
+            print('Warning: Negative weigt cost -> leading Dijkstra’s Algorithm not fit, losing solving speed')
+        
+        return cost_edge
+    
+    def exclude_this_truck_from_this_hub_plan(self,options_raw:list,hub_index:int) -> list:
+        depart_time_ego = options_raw[2]
+        depart_time_agg = options_raw[3]
+
+        qty_ego = options_raw[1]
+        qty_agg = options_raw[0]
+
+        qty_ego_sorted = qty_ego
+        qty_agg_sorted = qty_agg
+
+        time_list_sorted = sorted(depart_time_agg)
+        for _t_index,_timing in enumerate(time_list_sorted):
+            qty_agg_sorted[_t_index] = qty_agg[depart_time_agg.index(_timing)]
+            qty_ego_sorted[_t_index] = qty_ego[depart_time_ego.index(_timing)]
+
+        qty_ego = qty_ego_sorted
+        qty_agg = qty_agg_sorted
+
+        if len(depart_time_agg) != len(depart_time_ego):
+            print('Error: Inconsistent in planning Aggreated and Ego')
+        else:
+            [t_a,t_d] = self.answer_my_plan_at_hub(hub_index)
+            t_round   = t_d.replace(second=0,microsecond=0)
+            _this_truck_index = depart_time_agg.index(t_round)
+            qty_ego[_this_truck_index] -= 1
+            qty_agg[_this_truck_index] -= 1
+        return [time_list_sorted,qty_agg,qty_ego]
+    
+    def exclude_this_truck_for_this_edge_plan(self,options_raw:list,edge_index:int) -> list:
+
+        hub_index = self.node_list[self.edge_list.index(edge_index)]
+
+        return self.exclude_this_truck_from_this_hub_plan(options_raw,hub_index)
+
+    def generate_future_edges(self) -> list:
+        # return the edges
+        # this function is called when the truck is about to arrive a hub (decison-making point)
+        # the truck is at the self.current_node
+        _index = self.node_list.index(self.current_node)
+        # it has been checked before, this will not get called when truck finished
+        return self.edge_list[_index:]
+
+    def answer_time_window_for_edge(self,this_edge:int,now_clk:datetime) -> list:
+        _index = self.edge_list.index(this_edge)
+        _hub   = self.node_list[_index]
+        return self.answer_time_window_at_hub(hub_index=_hub,now_clk=now_clk)
+    
+    def optimize_plan(self,des:int) -> list:
+        dp_graph = self.dp_graph
+        return nx.shortest_path(dp_graph,source=0,target=des,weight='weight')
+
+    def update_waiting_plan(self,dp_shortest_path:list) -> None:
+        waiting_times = []
+        for u,v in zip(dp_shortest_path[:-1],dp_shortest_path[1:]):
+            edge_attributes = self.dp_graph[u][v]
+            if 'wait_time' in edge_attributes:
+            # Extract the waiting time and add it to the list
+                waiting_times.append(edge_attributes['wait_time'])
+                # if edge_attributes['wait_time'] > 0:
+                #     print('change of plans',self.truck_index)
+        _node_order = self.node_list.index(self.current_node)
+        self.waiting_plan[_node_order:-1] = waiting_times
+
+
 
 if __name__ == '__main__':
     test_nodes = [

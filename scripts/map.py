@@ -12,6 +12,7 @@ class GeoMap:
         self.edge_list = self.collect_edge_table_from_hubdict(self.task_dict_node)
         
         self.n_of_node = len(self._x_list)
+        self.n_of_edge = len(self.edge_list)
 
     def collect_edge_table_from_hubdict(self,data:dict) -> set:
         edge_set = []

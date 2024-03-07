@@ -10,8 +10,12 @@ from carrier_parameter import Carrier
 
 from global_clock_parameter import VirtualGlobalClock
 
+from mannul_debug_task2csv import convert_setup_to_csv
+
 from tqdm import tqdm
 from datetime import timedelta
+
+import networkx as nx
 
 # simulation settings
 
@@ -122,35 +126,37 @@ for truck_index in range(n_of_truck):
         truck_index,
         ts_start_time_list[truck_index],
         ts_travel_duration_list[truck_index],
-        TS.assign_carrier_index(truck_index),
+        TS.assign_carrier_index(truck_index,False),
         ts_waiting_budget[truck_index])
     T.generate_edge_list(M.edge_list)
     truck_list.append(T)
 
+# record this set up
+# convert_setup_to_csv(truck_list)
+
 print('Initlization: Truck Instantiation finished, Truck Amount:',n_of_truck)
 carrier_list = []
 for carrier_index in TS.carrier_index_list:
-    C = Carrier(carrier_index,0) # type is not applied for now
+    C = Carrier(carrier_index,0,secret_prime) # type is not applied for now
     for truck in truck_list:
         if truck.carrier_index == carrier_index:
             C.add_truck_into_this_carrier(truck2add=truck)
     C.next_period_plan_matrix = C.space_time_plan_table_init(
-        node_list=range(0,M.n_of_node),
+        edge_list=range(0,M.n_of_edge),
         future_range=next_period_duration,
         time_resolution=next_period_resolution)
     # create a all zero array to store the planning array
     carrier_list.append(C)
 
-# Though the truck is not yet online, the original plan is supposed be known by the carrier
-# TODO: Truck plan -> truck 
-#       Carrier -> generate the matrix form
 
 
 print('Initlization: Carrier Instantiation finished, Carrier Amount:',len(carrier_list))
 
 # ------
-CLK = VirtualGlobalClock(start_clk=min(ts_start_time_list)) 
-
+start_clk = min(ts_start_time_list)
+start_clk = start_clk.replace(second=0, microsecond=0)
+CLK = VirtualGlobalClock(start_clk) 
+cur_table_base = CLK.current_clk
 '''
 Some assumptions and simplication are made for the starting graph due to the dataset limitation
 
@@ -163,13 +169,17 @@ TS.init_communication_graph()
 # an empty graph has been created
 
 # The carrier will mathmaically convert its trucks' plan into table form
+
+# 07.02.2024: The table should not be started at an arbitrary timing, which makes it impossible to align
+# in a real practice. Now set to per minute grid.
+
 for _carrier in carrier_list:
     _carrier.load_truck_plan_into_table(base_line_clk = CLK.current_clk)
 # load current plan into the matrix form 
 
+# set up for progress bar
 Total_length = ts_max_operating_time - min(ts_start_time_list)
 total_length_ms = Total_length.total_seconds() * 1000
-
 loop_counter = 0
 
 total_iterations = int(total_length_ms) // communication_period + 1
@@ -259,6 +269,7 @@ for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
 
     if loop_counter > 0 and loop_counter % plan_table_row_rolling == 0:
         # load a new row into the table -> Throw away the oldest one
+        cur_table_base = CLK.current_clk
         for _carrier in carrier_list:
             if _carrier.carrier_index in list(TS.commun_graph.nodes):
                 _carrier.row_rolling_plan_table(CLK.current_clk)
@@ -271,28 +282,33 @@ for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
         for _carrier in carrier_list:
             if not _carrier.carrier_index in list(TS.commun_graph.nodes):
                 continue
+            # this carrier is not online since not even the earlist departure time
+            # TODO: reconsider the timing of get in the graph -> influencing the overall estimation
             if _carrier.current_slot_com == com_slot:
                 # randomly select one of the neighbors
+                # print("Comunnication Progress: Carrier {} is in this slot, reaching out...".format(str(_carrier.carrier_index)))
                 _select_negibors = _carrier.random_select_one_neighbor(TS.commun_graph)
                 if _select_negibors == -1:
+                    # print('No connected neighbors, abort!')
                     continue # no connecting neighbors
-            
-                if carrier_list[_select_negibors].current_slot_com == com_slot:
+                _select_negibors_index = TS.carrier_index_list.index(_select_negibors)
+                if carrier_list[ _select_negibors_index].current_slot_com == com_slot:
                     continue # failed to make connection since the selected neighbor is busy
-
                     #TODO: Maybe find an alternative connecting neighbor
-
                 # A neigbor is selected to communicate
                 # 1. addictive secret sharing
-                [A1,B1] = _carrier.split_plan_table_into_two_part(secret_prime)
-                [A2,B2] = carrier_list[_select_negibors].split_plan_table_into_two_part(secret_prime)
+                [A1,B1] = _carrier.split_plan_table_into_two_part()
+                [A2,B2] = carrier_list[_select_negibors_index].split_plan_table_into_two_part()
                 _carrier.update_plan_matrix(A1,A2)
-                carrier_list[_select_negibors].update_plan_matrix(B1,B2)
+                carrier_list[ _select_negibors_index].update_plan_matrix(B1,B2)
                 # now the data, even the most recent one, is blurred
                 # 2. gossip-based averaging
-                _avg_table = (_carrier.next_period_plan_matrix + carrier_list[_select_negibors] .next_period_plan_matrix)/2
+                _avg_table = (_carrier.next_period_plan_matrix + carrier_list[_select_negibors_index] .next_period_plan_matrix)/2
                 _carrier.next_period_plan_matrix = _avg_table
-                carrier_list[_select_negibors] .next_period_plan_matrix = _avg_table
+                carrier_list[ _select_negibors_index].next_period_plan_matrix = _avg_table
+
+                _carrier.est_current_carrier_number()
+                carrier_list[ _select_negibors_index].est_current_carrier_number()
         
     #  check now if a truck arriving the hub
     for _carrier in carrier_list:
@@ -302,20 +318,64 @@ for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
             if is_a_arriving_clk:
                 # This is the moment that is 60s towards before the physical hub
                 # The optimization process for the hub is triggered
-                future_plan = _carrier.sync_future_plan(
-                    requried_hub = _truck.generate_future_hubs(),
-                    arrival_time = _truck.deadline,
-                    current_clk  = CLK.current_clk,
-                    truck_index  = _truck.truck_index,
-                    est_carrier  = len(TS.commun_graph.nodes)
-                    ) # truck -> carrier manager, get latest estimation on truck distribuitions
-                
+                _truck.dp_graph = nx.DiGraph()
+                _truck.dp_graph.add_node(0,left_time=CLK.current_clk,right_time=CLK.current_clk + timedelta(seconds=60),hub=-1,edge=-1) # A virtual search start point
+                dp_node_id = 1
+                left_hub_options    = [0]
+                right_hub_options   = []
+                t_earliest = CLK.current_clk + timedelta(seconds=60)
+                for _edge in _truck.generate_future_edges():
+                    _hub = _truck.node_list[_truck.edge_list.index(_edge)]
+                    # it must exist by defination and above filtered
+                    [window_e,window_l] = _truck.answer_time_window_for_edge(_edge,CLK.current_clk)
+                    # this gives us the time window of when the truck may departure
+                    options_raw = _carrier.answer_known_departure_list_for_this_edge(_edge,window_e,window_l,cur_table_base)
+                    # These data include the truck itself, now we have to exclude it so that a fair comparsion is made
+                    # we also sort the timing list in the following function
+                    [depart_time_list,agg_qty,ego_qty] = _truck.exclude_this_truck_for_this_edge_plan(options_raw,_edge)
+                    # build dp graph from this result hub by hub
+                    # this hub is one of concerned -> It must get contained in the agg data and ego data
+                    this_edge_duration = timedelta(seconds=_truck.travel_duration[_truck.edge_list.index(_edge)])
+                    if not t_earliest in depart_time_list:
+                        # the non-waitting is of course a possible choice that should be added here
+                        _truck.dp_graph.add_node(dp_node_id,left_time=t_earliest,right_time=t_earliest+this_edge_duration,edge=_edge,hub=_hub)
+                        right_hub_options.append(dp_node_id)
+                        dp_node_id += 1
+                    else:
+                        for depart_time in depart_time_list:
+                            _truck.dp_graph.add_node(dp_node_id,left_time=depart_time,right_time=depart_time+this_edge_duration,edge=_edge,hub=_hub)
+                            right_hub_options.append(dp_node_id)
+                            # for the next hub, it may see incoming options in this list
+                            dp_node_id += 1
 
-                
-            
+                    for dp_node_left in left_hub_options:
+                        for _index,dp_node_right in enumerate(right_hub_options):
+                            if _truck.dp_graph.nodes[dp_node_left]['right_time'] <= _truck.dp_graph.nodes[dp_node_right]['left_time']:
+                                wait_time_delta = _truck.dp_graph.nodes[dp_node_right]['left_time'] - _truck.dp_graph.nodes[dp_node_left]['right_time']
+                                wait_seconds    = wait_time_delta.total_seconds()
+                                if wait_seconds != 0:
+                                    # this is not a non-stop option
+                                    wait_seconds += next_period_resolution * 60 # because the Discretization, we do not want underestimate the waiting cost
+                                edge_weight     = _truck.caculate_dp_edge_weight(_edge,agg_qty[_index],ego_qty[_index],wait_seconds)
+                                _truck.dp_graph.add_edge(dp_node_left,dp_node_right,weight=edge_weight,wait_time=wait_seconds)                                
 
+                    # move to next edge
+                    t_earliest          += this_edge_duration
+                    left_hub_options    = right_hub_options
+                    right_hub_options   = []
+                # now we put a virtual destination 
+                    _truck.dp_graph.add_node(dp_node_id)
+                    for dp_node in left_hub_options:
+                        _truck.dp_graph.add_edge(dp_node,dp_node_id,weight=0) # no cost after arrive destination
+                        # this is to say, once the waiting time at the second last hub is determined, no more decisons
 
-    # TODO: loop_counter += 1
+               
+                # the truck will update its planning based on such dp graph
+                path_raw = _truck.optimize_plan(dp_node_id)
+                _truck.update_waiting_plan(path_raw)
+                print('\nDP graph shortest path generated and updated to waiting plan for this truck',_truck.truck_index)
+        
+    #loop_counter += 1s
 
 
         

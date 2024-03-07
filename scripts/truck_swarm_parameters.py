@@ -3,7 +3,7 @@
 import random
 from datetime import datetime,timedelta
 import networkx as nx
-
+import csv
 class TruckSwarm:
     # This is a class that globally generate parameters for all truck
 
@@ -43,48 +43,63 @@ class TruckSwarm:
             ts_departure_time.append(datetime.strptime(t_d[0], date_format))
         return ts_departure_time
     
-    def assign_carrier_index(self,truck_index: int) -> int:
-        if self.amount == 5000:
-            i = truck_index
-        else:
-            i = self.random_index[self._random_index_pointer]
-            self._random_index_pointer += 1
-        # vehicle 0-4999, fleet 1-855
-        # small size fleet Type 1: where each fleet has only one truck (total: 325 trucks, f1-f325)
-        if i>=0 and i<=324:
-            f_i=i+1
-        # small-size fleet Type 2: where each fleet has 3 trucks (total: 1086 trucks, f326-f687)
-        if i>=325 and i<=1410:
-            f_i=326+int((i-325)/3)
-        
-        # small-size fleet Type 3: where each fleet has 7 trucks (total: 560 trucks, f688-767)
-        if i>=1411 and i<=1970:
-            f_i=688+int((i-1411)/7)
-        
-        # medium-size fleet Type 4: where each fleet has 15 trucks (total:735 trucks, f768-f816)
-        if i>=1971 and i<=2705: 
-            f_i=768+int((i-1971)/15)
-        
-        # medium-size fleet Type 5: where each fleet has 34 trucks (total: 918 trucks, f817-f843)
-        if i>=2706 and i<=3623:
-            f_i=817+int((i-2706)/34)
-        
-        # medium-size fleet Type 6: where each fleet has 74 trucks (total: 592 trucks, f844-f851)
-        if i>=3624 and i<=4215:
-            f_i=844+int((i-3624)/74)
-        
-        # large-size fleet Type 7: where each fleet has 148 trucks (total: 444 trucks, f852-f854)
-        if i>=4216 and i<=4659:
-            f_i=852+int((i-4216)/148)
-        
-        # lareg-size fleet Type 8: where each fleet has 340 trucks (total: 340 trucks)
-        if i>=4660 and i<=4999:
-            f_i=855
+    def assign_carrier_index(self,truck_index: int,_is_random: bool) -> int:
+        if _is_random:
+            if self.amount == 5000:
+                i = truck_index
+            else:
+                i = self.random_index[self._random_index_pointer]
+                self._random_index_pointer += 1
+            # vehicle 0-4999, fleet 1-855
+            # small size fleet Type 1: where each fleet has only one truck (total: 325 trucks, f1-f325)
+            if i>=0 and i<=324:
+                f_i=i+1
+            # small-size fleet Type 2: where each fleet has 3 trucks (total: 1086 trucks, f326-f687)
+            if i>=325 and i<=1410:
+                f_i=326+int((i-325)/3)
+            
+            # small-size fleet Type 3: where each fleet has 7 trucks (total: 560 trucks, f688-767)
+            if i>=1411 and i<=1970:
+                f_i=688+int((i-1411)/7)
+            
+            # medium-size fleet Type 4: where each fleet has 15 trucks (total:735 trucks, f768-f816)
+            if i>=1971 and i<=2705: 
+                f_i=768+int((i-1971)/15)
+            
+            # medium-size fleet Type 5: where each fleet has 34 trucks (total: 918 trucks, f817-f843)
+            if i>=2706 and i<=3623:
+                f_i=817+int((i-2706)/34)
+            
+            # medium-size fleet Type 6: where each fleet has 74 trucks (total: 592 trucks, f844-f851)
+            if i>=3624 and i<=4215:
+                f_i=844+int((i-3624)/74)
+            
+            # large-size fleet Type 7: where each fleet has 148 trucks (total: 444 trucks, f852-f854)
+            if i>=4216 and i<=4659:
+                f_i=852+int((i-4216)/148)
+            
+            # lareg-size fleet Type 8: where each fleet has 340 trucks (total: 340 trucks)
+            if i>=4660 and i<=4999:
+                f_i=855
 
+        else:
+            with open('start_configuration.csv', newline='') as csvfile:
+                reader = csv.reader(csvfile)
+                next(reader)  # Skip the header row if it exists
+
+                for row in reader:
+                    # Extract truck index and carrier index from the row
+                    row_truck_index = int(row[0])  # Assuming the truck index is in the first column
+                    carrier_index = int(row[1])     # Assuming the carrier index is in the second column
+                    
+                    # Check if the truck index matches the input truck index
+                    if row_truck_index == truck_index:
+                        # return carrier_index  # Return the carrier index if found
+                        f_i = carrier_index
+                    
         if not f_i in self.carrier_index_list:
             self.carrier_index_list.append(f_i) # record all carrier index in this simulation
         return f_i
-
             
     def generate_virtual_random_truck_index(self):
         # only in use for smaller data set in debugging
