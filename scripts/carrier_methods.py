@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from truck_parameter import Truck
+from truck_methods import Truck
 import numpy as np
 from datetime import datetime, timedelta
 import random
@@ -23,6 +23,11 @@ class Carrier:
         self.is_in_communication    = False
         self.public_prime           = public_prime
         self.carrier_qty_est        = 1
+
+        self.neighoring_carrier_index = []
+        # self.encrypted_data
+        # self.secret_part_kept       = np.array()
+
         # with all trucks in the list, it should be able to generate the matrix for transmitting
         # self.next_period_plan_matrix = np.array()
 
@@ -108,8 +113,8 @@ class Carrier:
                 if _d_time >= concerned_time_slot_right:
                     break
 
-    def update_plan_matrix(self,input1:np.array,input2:np.array) -> None:
-        self.next_period_plan_matrix = input1 + input2
+    # def update_plan_matrix(self,input1:np.array,input2:np.array) -> None:
+    #     self.next_period_plan_matrix = input1 + input2
     
     # def explain_encrypted_matrix(self,input_array:np.array,est_carrier:int) -> np.array:
     #     return round((input_array * est_carrier) % self.public_prime)
@@ -216,7 +221,7 @@ class Carrier:
         # (A row in the time plan matrix)
 
         if start_time < table_base_clk + timedelta(minutes=self.time_resolution*self.future_range):
-            edge_array_raw = self.next_period_plan_matrix[:,edge_index]
+            edge_array_raw = self.next_period_agg[:,edge_index]
             sum_col        = (edge_array_raw % self.public_prime) * self.carrier_qty_est
 
             for row_index,row in enumerate(list(sum_col)):
@@ -238,7 +243,8 @@ class Carrier:
                         ego_qty[ego_depart_time.index(_t_round)] += 1
                     else:
                         ego_depart_time.append(_t_round)
-                        ego_qty.append(1)              
+                        ego_qty.append(1) 
+                     
         if not len(ego_depart_time) == len(agg_depart_time):
             # there is such case that part of the ego plan is not in the agg data, that we align the length of data
             for ego_depart_time_index,ego_depart_time_ele in enumerate(ego_depart_time):
@@ -264,3 +270,15 @@ class Carrier:
             min_value = np.min(_sum_matrix[non_zero_indices])
             # it is assumed that this value is the average of the sum '1'
             self.carrier_qty_est = math.floor(1/min_value)
+        
+    def get_current_carrier_number(self,est_qty:int) -> None:
+        self.carrier_qty_est = est_qty
+
+    def select_a_random_neighbor(self) -> int:
+        return random.choice(self.neighoring_carrier_index)
+    
+    def decode_agg_truck_table(self) -> None:
+        if self.carrier_qty_est > 1:
+            self.next_period_agg = np.round(self.encrypted_data * self.carrier_qty_est)
+        else:
+            self.next_period_agg = self.next_period_plan_matrix

@@ -8,7 +8,7 @@ class Truck:
     def __init__(
             self,node_list:list,
             truck_index:int,
-            start_time:int,
+            start_time:int, # This is actually the online time
             travel_duration:list,
             carrier_index:int,
             time_buddget:float
@@ -349,8 +349,17 @@ class Truck:
         _node_order = self.node_list.index(self.current_node)
         self.waiting_plan[_node_order:-1] = waiting_times
 
-
-
+    def is_now_the_departuing_clk(self,current_clk:datetime,time_gap:int) -> bool:
+        for _n_order,_node_index in enumerate(self.node_list):
+            if _n_order == 0:
+                _this_depart_time = self.start_time + self.waiting_plan[0]
+            else:
+                _this_depart_time += self.waiting_plan[_n_order] + self.travel_duration[_n_order-1]
+            if current_clk >= _this_depart_time and current_clk < _this_depart_time + timedelta(microseconds=time_gap)
+                return (True,_node_index)
+            else:
+                return (False,-1)
+            
 if __name__ == '__main__':
     test_nodes = [
         (18.02546160254861, 59.38157382906624), 

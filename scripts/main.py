@@ -1,160 +1,126 @@
 # -*- coding: utf-8 -*-
 
+# import self-defined classes in truck platooning problem
 from map import GeoMap
+from global_handler import global_handler
+from truck_methods import Truck
+from carrier_methods import Carrier
+from global_clock import VirtualGlobalClock
+from encryption_methods import Encrpytion_Platfrom
 
-from truck_swarm_parameters import TruckSwarm
- # global action. virtual instance, applied
-
-from truck_parameter import Truck
-from carrier_parameter import Carrier
-
-from global_clock_parameter import VirtualGlobalClock
-
-from mannul_debug_task2csv import convert_setup_to_csv
-
-from tqdm import tqdm
 from datetime import timedelta
-
+from tqdm import tqdm
 import networkx as nx
-
 # simulation settings
+# test_with_small_data = False
 
-test_with_small_data = False
+# planning matirx size defined
+planning_horizon    = 60 # minutes -> consensus window, carrier only reach planning average for the xx minutes from this moment
+planning_resolution = 1  # We assume that the turcks in n minutes, departures at the same time
 
-next_period_duration    = 60 # min -> consensus window, carrier only reach planning average for the xx minutes from this moment
-next_period_resolution  = 1  # We assume that the turcks in n minutes, departures at the same time
+# frequency of start a average process with neighbor for a carrier
+communication_period = 100 # ms -> this is also the step length of simulation
+communication_slots  = 50  # there are xx slots in this communication phases
 
-communication_period    = 100 #ms
-communication_slot      = 50
+steps_rolling_horizon_forward = planning_resolution * 60 * 1000 / communication_period
+## every these steps that the table is rolling (one more row added and first row removed)
 
-plan_table_row_rolling  = next_period_resolution * 60 * 1000 / communication_period # every * rounds of communication, the table should be updated
-
-# ---
-secret_prime = 5009 # With a lot of reduancy
+# addictive secret sharing public key
+public_key = 1009
 
 # ==============================
 
 '''
 Data Input
 '''
-if test_with_small_data:
-    # small data segements for test. Comment out and replaced with input file
-    task_dict = {
-    0: [(16.21247986026327, 59.75805915309397), (16.06903491037792, 60.20902572311321)],
-    1: [(18.02546160254861, 59.38157382906624), (16.50658561538482, 58.28150384602444), (16.48374131130608, 57.56893497161655), (16.3883782476514, 56.9467696413148),(16.32098233050319, 56.6727356017633)]
-
-    } # small test data for debugging
-
-    travel_time_dict = {
-        0: [[(16.21247986026327, 59.75805915309397), 5409.8719]], 
-        1: [[(18.02546160254861, 59.38157382906624), 12703.2895], [(16.50658561538482, 58.28150384602444), 5755.7795], [(16.48374131130608, 57.56893497161655), 4285.0585], [(16.3883782476514, 56.9467696413148), 1894.0153]]
-    } # This dict contains the starting node and the travel time duration on the edge, it must to cross-referenced with the Geo map
-    
-    vehicle_arr_dep_test = {
-        0: {(16.21247986026327, 59.75805915309397): {'t_a': ['2021-11-20 09:00:00.0000'], 't_d': ['2021-11-20 09:00:00.0000'], 'label': 'I'}, (16.06903491037792, 60.20902572311321): {'t_a': ['2021-11-20 10:30:09.8719'], 't_d': []}}, 
-        1: {(18.02546160254861, 59.38157382906624): {'t_a': ['2021-11-20 08:01:40.0000'], 't_d': ['2021-11-20 08:01:40.0000'], 'label': 'I'}, (16.50658561538482, 58.28150384602444): {'t_a': ['2021-11-20 11:33:23.2895'], 't_d': ['2021-11-20 11:33:23.2895'], 'label': 'I'}, (16.48374131130608, 57.56893497161655): {'t_a': ['2021-11-20 13:09:19.0690'], 't_d': ['2021-11-20 13:09:19.0690'], 'label': 'I'}, (16.3883782476514, 56.9467696413148): {'t_a': ['2021-11-20 14:20:44.1275'], 't_d': ['2021-11-20 14:20:44.1275'], 'label': 'I'}, (16.32098233050319, 56.6727356017633): {'t_a': ['2021-11-20 14:52:18.1428'], 't_d': []}}
-    } # From this we need need extract the starting time
-
-    travel_dd_test = {
-        0: 540.9872, 1: 2463.8143
-    }
-
-else:
-    # load from dict style files
-    # contents are quite reduant since these are intermedia results from previous studies
-    f=open('data\OD_hubs_new_1000Trucks','r')
-    a=f.read()
-    task_dict=eval(a) # hubs between the origin and destination
-    f.close()
-    # ----
-    f=open('data\OD_hubs_travel_1000Trucks','r')
-    a=f.read()
-    travel_time_dict=eval(a) # travel times of different trucks on road segments
-    f.close()
-    # ----
-    f=open('data\\vehicle_arr_dep_hubs0_1000Trucks','r') # the initial departure times from the origins 
-    a=f.read()
-    vehicle_arr_dep_test=eval(a)
-    f.close()
-    # ---
-    f=open('data\\travel_dd_1000Trucks','r')
-    a=f.read()
-    travel_dd_test=eval(a) # a dict, which includes the allowed total waiting time (seconds) of each truck in the whole trip
-    f.close()
+# load from dict style files
+# contents are quite reduant since these are intermedia results from previous studies
+f=open('data\OD_hubs_new_1000Trucks','r')
+a=f.read()
+task_dict=eval(a) # hubs between the origin and destination
+f.close()
+# ----
+f=open('data\OD_hubs_travel_1000Trucks','r')
+a=f.read()
+travel_time_dict=eval(a) # travel times of different trucks on road segments
+f.close()
+# ----
+f=open('data\\vehicle_arr_dep_hubs0_1000Trucks','r') # the initial departure times from the origins 
+a=f.read()
+vehicle_arr_dep_test=eval(a)
+f.close()
+# ---
+f=open('data\\travel_dd_1000Trucks','r')
+a=f.read()
+travel_dd_test=eval(a) # a dict, which includes the allowed total waiting time (seconds) of each truck in the whole trip
+f.close()
 
 n_of_truck = len(task_dict)
 
-
 # Extract Map information from the OD pairs 
 M = GeoMap(task_dict)
+## Only paths recored in the task_dict is built in this map
 
-'''
-This class init with the transformation labeling each (x,y) to an index
-From the path of trucks, it also extract the concerned edge list of the 
-road network
+Simu_Setter     = global_handler(n_of_truck,task_dict)
 
--------------------------------------------------------------------------
+# collect the travel time on each geographical edge
+travel_duration     = Simu_Setter.collect_travel_duration(travel_time_dict)
+# extract the when the truck depart from its first hub (by default, on waitting at hub)
+first_dep_time      = Simu_Setter.extract_departure_time(vehicle_arr_dep_test)
 
-In the privacy preserving methods, a truck does not know anything about the 
-potential parteners as they may belong to another fleet
-'''
+truck_online_time   = []
+for _dep_time in first_dep_time:
+    truck_online_time.append(_dep_time - timedelta(seconds=60))
+# the truck is considered 'existed' in the map, one minute before the first dep time
+    
+truck_waiting_budget = travel_dd_test
 
-# Instantiation of trucks
-# collect the travel time on each edge of each truck with truck swarm method
-TS = TruckSwarm(n_of_truck,M.task_dict_node)
-
-ts_travel_duration_list = TS.collect_travel_duration(travel_time_dict) #FIXME: This is a dictionary
-
-ts_start_time_list  = TS.extract_departure_time(vehicle_arr_dep_test) #FIXME: Inconsistent in naming
-
-for t_index,_timing in enumerate(ts_start_time_list):
-    ts_start_time_list[t_index] = _timing - timedelta(seconds=60)
-
-# So we discuss about the timing here, we give DP search 90s for perform and another 30s for quick communication
-# This is to say that 2 mins before a truck arrive a hub, which we may say the truck is within the 300 m range of the hub
-
-# we move the 'starting operation' timing 60s earlier
-
-ts_waiting_budget       = travel_dd_test
-ts_max_operating_time   = TS.get_max_simulation_time(ts_start_time_list,ts_travel_duration_list,ts_waiting_budget)
-
+max_operating_time = Simu_Setter.get_max_simulation_time(
+    first_dep_time,
+    travel_duration,
+    truck_waiting_budget,
+    planning_resolution
+    )
+# from this we decide how many steps the simulation takes
 
 truck_list = [] # refer each truck with its index as key
+# truck_index_list = []
 for truck_index in range(n_of_truck):
     T = Truck(
         M.task_dict_node[truck_index],
         truck_index,
-        ts_start_time_list[truck_index],
-        ts_travel_duration_list[truck_index],
-        TS.assign_carrier_index(truck_index,False),
-        ts_waiting_budget[truck_index])
+        truck_online_time[truck_index],
+        travel_duration[truck_index],
+        Simu_Setter.assign_carrier_index(truck_index,False),
+        truck_waiting_budget[truck_index])
     T.generate_edge_list(M.edge_list)
     truck_list.append(T)
+    # truck_index_list.append(truck_index)
 
 # record this set up
 # convert_setup_to_csv(truck_list)
 
-print('Initlization: Truck Instantiation finished, Truck Amount:',n_of_truck)
+print('Initialization: Truck Instantiation finished, Truck Amount:',n_of_truck)
+
 carrier_list = []
-for carrier_index in TS.carrier_index_list:
-    C = Carrier(carrier_index,0,secret_prime) # type is not applied for now
-    for truck in truck_list:
-        if truck.carrier_index == carrier_index:
-            C.add_truck_into_this_carrier(truck2add=truck)
+for carrier_index in Simu_Setter.carrier_index_list:
+    C = Carrier(carrier_index,0,public_key) # type is not applied for now
+    for _truck in truck_list:
+        if _truck.carrier_index == carrier_index:
+            C.add_truck_into_this_carrier(truck2add=_truck)
     C.next_period_plan_matrix = C.space_time_plan_table_init(
         edge_list=range(0,M.n_of_edge),
-        future_range=next_period_duration,
-        time_resolution=next_period_resolution)
+        future_range=planning_horizon,
+        time_resolution=planning_resolution)
     # create a all zero array to store the planning array
     carrier_list.append(C)
 
+print('Initialization: Carrier Instantiation finished, Carrier Amount:',len(carrier_list))
 
+start_clk = min(truck_online_time)
+start_clk = start_clk.replace(second=0, microsecond=0) # round to the closet int MINUTES
 
-print('Initlization: Carrier Instantiation finished, Carrier Amount:',len(carrier_list))
-
-# ------
-start_clk = min(ts_start_time_list)
-start_clk = start_clk.replace(second=0, microsecond=0)
+# global clock
 CLK = VirtualGlobalClock(start_clk) 
 cur_table_base = CLK.current_clk
 '''
@@ -164,25 +130,21 @@ Trucks will suddenly "appear" on the first hub (as they turn it on and become on
 Carriers, trucks appear one by one as time goes and will disapear (goes offline) when tasks finished.
 
 '''
+# now init a third-party encryption center that serves the encyption
 
-TS.init_communication_graph()
-# an empty graph has been created
-
-# The carrier will mathmaically convert its trucks' plan into table form
-
-# 07.02.2024: The table should not be started at an arbitrary timing, which makes it impossible to align
-# in a real practice. Now set to per minute grid.
+EP = Encrpytion_Platfrom(key=public_key)
 
 for _carrier in carrier_list:
     _carrier.load_truck_plan_into_table(base_line_clk = CLK.current_clk)
-# load current plan into the matrix form 
 
 # set up for progress bar
-Total_length = ts_max_operating_time - min(ts_start_time_list)
+Total_length    = max_operating_time - min(truck_online_time)
 total_length_ms = Total_length.total_seconds() * 1000
 loop_counter = 0
 
 total_iterations = int(total_length_ms) // communication_period + 1
+loop_counter = 0
+
 for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
     
     # main loop start, we consider the step length 100 ms -> 10Hz communicating rate
@@ -190,140 +152,131 @@ for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
     # The sequence is set on the prespective of a truck
 
     # -----
-
-    ts_node_trucks = {i: [] for i in range(M.n_of_node)} 
-    # This dict contains the truck object in this node (node index)
-    # This is reconstructed every clk to catch the dynamic of truck movement with less coding size
-    for _this_carier in carrier_list:
-
-        for this_truck in  _this_carier.truck_list:
-            
-            if CLK.current_clk >= this_truck.start_time:
-
+    trucks_in_this_node = {i: [] for i in range(M.n_of_node)} 
+    # In this setup, a carrier would first check neighboring carriers
+    
+    for _carrier in carrier_list:
+        _carrier.neighoring_carrier_index = [] 
+        # reconstruct the list everytime
+        for _truck in _carrier.truck_list:
+            if CLK.current_clk >= _truck.start_time:
                 # The truck is online, the truck should locate itself, in real world this 
-                # is achieved with a global localization service such as GPS
+                # is achieved with a global localization service such as GPS.
+                _truck.locate_myself_based_on_time_and_plan(CLK.current_clk)
 
-                this_truck.locate_myself_based_on_time_and_plan(CLK.current_clk)
-        
-                # now we use global method, to see the current communication graph
-                        
-                # there are two kinds of communication links
-                
                 # 1. the truck is arriving/parking at the same node -> current node indentical and not -1
-                if not this_truck.current_node == -1:
-                    ts_node_trucks[this_truck.current_node].append(this_truck) # register the truck to the node
-                
+                if not _truck.current_node == -1:
+                    trucks_in_this_node[_truck.current_node].append(_truck) 
+                    # register the truck to the node, and we assign this after the loop
+
                 # 2. the truck is in platooning 
-                # TODO: carefully design the process of entering/leaving a platoon -> when does the communication edge break?
-                
-                _in_this_platoon = this_truck.platooning_partener # itself should be excluded
-
+                _in_this_platoon = _truck.platooning_partener # itself should be excluded
                 if not len(_in_this_platoon) == 0:
-                    _carrier_index = this_truck.carrier_index
-                    for _truck in _in_this_platoon:
-                        # if in a platoon, this carrier should already be registered in the previous hub
-                        # add in edge
-                        if not TS.commun_graph.has_edge( _carrier_index,_truck.carrier_index):
-                            TS.commun_graph.add_edge()
-
-    # Now check node by node, to generate the communication graph link -> 1 above 
-            
+                    # _carrier_index = _truck.carrier_index
+                    for _truck_in_platoon in _in_this_platoon:
+                        if _truck_in_platoon.carrier_index != _truck.carrier_index:
+                            if not _truck_in_platoon.carrier_index in _carrier.neighoring_carrier_index:
+                                _carrier.neighoring_carrier_index.append(_truck_in_platoon.carrier_index)
+                
+    # Now check node by node, to generate add neighbor to the list
     for _node_index in range(M.n_of_node):
+        this_node_trucks_list = trucks_in_this_node[_node_index]
 
-        this_node_trucks_list = ts_node_trucks[_node_index]
         if len(this_node_trucks_list) < 1:
             # no connection in this hub with 0
             continue
-
+    
         for _truck in this_node_trucks_list:
-            
-            _carrier_index = _truck.carrier_index
+            for _another_truck in this_node_trucks_list:
+                if not _truck.carrier_index == _another_truck.carrier_index:
+                    # we may add this to each other
+                    _index_1 = Simu_Setter.carrier_index_list.index(_truck.carrier_index)
+                    _index_2 = Simu_Setter.carrier_index_list.index(_another_truck.carrier_index)
 
-            if not _carrier_index in TS.commun_graph.nodes:
-                TS.commun_graph.add_node(_carrier_index)
-        
-        if len(this_node_trucks_list) == 1:
-            continue
-
-        for i in range(len(this_node_trucks_list)):
-            for j in range(i+1,len(this_node_trucks_list)):
-                if not TS.commun_graph.has_edge(this_node_trucks_list[i].carrier_index,this_node_trucks_list[j].carrier_index):
-                    TS.commun_graph.add_edge(this_node_trucks_list[i].carrier_index,this_node_trucks_list[j].carrier_index)
-                    # This adge may already formed at other hubs or platoons
-    
-    # Do we specify which physical trucks to transmit the message?
-    # Not used in the main algorithm and not easy to do
-    # TODO: Maybe add methods to record the actual physical path of information transmission
+                    if not _another_truck.carrier_index in carrier_list[_index_1].neighoring_carrier_index:
+                        carrier_list[_index_1].neighoring_carrier_index.append(_another_truck.carrier_index)
                     
+                    if not _truck.carrier_index in carrier_list[_index_2].neighoring_carrier_index:
+                        carrier_list[_index_2].neighoring_carrier_index.append(_truck.carrier_index)
     '''
-    Assumption: the communication cross carriers happens all time, at certain frequency
-    In simulation, we may globally random select a carrier, which is not the most presentative way
-    Therefore, we propose a random way for the carrier itself
+                Assumption: Now the carrier will send its neighboring information the EP, the EP is to deciede who will 
+                be doing secrective averaging
     
-    Based on ref [35], we first consider there is 50 available slots in this 100ms for communication
-    The carrier will randomly pick one to start the 'push' action. Basically this is done in a random order 
-    
-    It may considered that we shift the time of each truck randomly so they are less likely to crash
-    
-    '''    
+                ''' 
 
-    if loop_counter > 0 and loop_counter % plan_table_row_rolling == 0:
-        # load a new row into the table -> Throw away the oldest one
+    EP.init_communication_graph()
+
+    for _carrier in carrier_list:
+    
+        if len(_carrier.neighoring_carrier_index) > 0:
+            # there is some neighbor
+            EP.process_carrier_neighbor_list(_carrier.neighoring_carrier_index)
+            # The EP is about to first build a (very likely not connected graph)
+    
+    # Now the encryption platform must find sub groups that is internally connected 
+    # and have at least three members
+
+    EP.encryption_platform_prepare()
+    # in this process, the platform knows which carrier is okay to provide service
+
+    if loop_counter > 0 and loop_counter % (planning_resolution * 60/communication_period) == 0:
         cur_table_base = CLK.current_clk
         for _carrier in carrier_list:
-            if _carrier.carrier_index in list(TS.commun_graph.nodes):
-                _carrier.row_rolling_plan_table(CLK.current_clk)
-
+            _carrier.row_rolling_plan_table(CLK.current_clk)
+    loop_counter += 1
+    # carrier -> EP: send secretive parts to the platform
     for _carrier in carrier_list:
-        if _carrier.carrier_index in list(TS.commun_graph.nodes):
-            _carrier.select_communication_slot(communication_slot)
+    # but if not qualified, nothing happens
+        if EP.answer_if_qualified(_carrier.carrier_index):
+            # the carrier is qualified
+            [A,_carrier.secret_part_kept] = _carrier.split_plan_table_into_two_part()
+            EP.recieve_carrier_data(_carrier.carrier_index,A)
     
-    for com_slot in range(1,communication_slot+1):
-        for _carrier in carrier_list:
-            if not _carrier.carrier_index in list(TS.commun_graph.nodes):
-                continue
-            # this carrier is not online since not even the earlist departure time
-            # TODO: reconsider the timing of get in the graph -> influencing the overall estimation
-            if _carrier.current_slot_com == com_slot:
-                # randomly select one of the neighbors
-                # print("Comunnication Progress: Carrier {} is in this slot, reaching out...".format(str(_carrier.carrier_index)))
-                _select_negibors = _carrier.random_select_one_neighbor(TS.commun_graph)
-                if _select_negibors == -1:
-                    # print('No connected neighbors, abort!')
-                    continue # no connecting neighbors
-                _select_negibors_index = TS.carrier_index_list.index(_select_negibors)
-                if carrier_list[ _select_negibors_index].current_slot_com == com_slot:
-                    continue # failed to make connection since the selected neighbor is busy
-                    #TODO: Maybe find an alternative connecting neighbor
-                # A neigbor is selected to communicate
-                # 1. addictive secret sharing
-                [A1,B1] = _carrier.split_plan_table_into_two_part()
-                [A2,B2] = carrier_list[_select_negibors_index].split_plan_table_into_two_part()
-                _carrier.update_plan_matrix(A1,A2)
-                carrier_list[ _select_negibors_index].update_plan_matrix(B1,B2)
-                # now the data, even the most recent one, is blurred
-                # 2. gossip-based averaging
-                _avg_table = (_carrier.next_period_plan_matrix + carrier_list[_select_negibors_index] .next_period_plan_matrix)/2
-                _carrier.next_period_plan_matrix = _avg_table
-                carrier_list[ _select_negibors_index].next_period_plan_matrix = _avg_table
+    # for _carrier in carrier_list:
+    #     if EP.answer_if_qualified(_carrier.carrier_index):
+            
+    EP.redistribute_secret_parts()
+    # EP -> carriers: send back data if qualified
+    for _carrier in carrier_list:
+        if EP.answer_if_qualified(_carrier.carrier_index):
+            _carrier.encrypted_data = EP.answer_distribute_values(_carrier.carrier_index) + _carrier.secret_part_kept
 
-                _carrier.est_current_carrier_number()
-                carrier_list[ _select_negibors_index].est_current_carrier_number()
-        
+    # The third party service has been finished, we do it once every minute
+    # if qualified, then a carrier may randomly chose a neighbor to contact
+    for _carrier in carrier_list:
+        if not EP.answer_if_qualified(_carrier.carrier_index):
+            continue # not qualified, no information exchanged
+        _selected_neighbor_index = _carrier.select_a_random_neighbor()
+        _neighbor = carrier_list[Simu_Setter.carrier_index_list.index(_selected_neighbor_index)]
+        _avg_data = (_carrier.encrypted_data + _neighbor.encrypted_data)/2
+        _carrier.encrypted_data     = _avg_data
+        _neighbor.encrypted_data    = _avg_data
+        carrier_list[Simu_Setter.carrier_index_list.index(_selected_neighbor_index)] = _neighbor
+        _carrier.get_current_carrier_number(EP.answer_subgraph_number(_carrier.carrier_index))
+    
+    actual_on_edge_trucks = {}
+    # this is used to register actually on edge trucks that we update (platoonig_partener) of every truck
+    # this is done by simulation setter, as in the real world, the truck depature within the same time will be treated as a platoon
+
     #  check now if a truck arriving the hub
     for _carrier in carrier_list:
+        _carrier.decode_agg_truck_table() # for those who are not connected, this will just pass through
         for _truck in _carrier.truck_list:
-            # check the arrival time
             is_a_arriving_clk = _truck.is_now_the_arrving_clk(CLK.current_clk,communication_period)[0]
             if is_a_arriving_clk:
-                # This is the moment that is 60s towards before the physical hub
-                # The optimization process for the hub is triggered
-                _truck.dp_graph = nx.DiGraph()
-                _truck.dp_graph.add_node(0,left_time=CLK.current_clk,right_time=CLK.current_clk + timedelta(seconds=60),hub=-1,edge=-1) # A virtual search start point
+            # This is the moment that is 60s towards before the physical hub
+            # The optimization process for the hub is triggered
+                _truck.dp_graph = nx.DiGraph()      
+                _truck.dp_graph.add_node(
+                    0,
+                    left_time=CLK.current_clk,
+                    right_time=CLK.current_clk + timedelta(seconds=60),
+                    hub=-1,edge=-1) # A virtual search start point
                 dp_node_id = 1
                 left_hub_options    = [0]
                 right_hub_options   = []
                 t_earliest = CLK.current_clk + timedelta(seconds=60)
+                # t_next     = Simu_Setter.next_int_row_clk(t_earliest,cur_table_base,planning_resolution)
                 for _edge in _truck.generate_future_edges():
                     _hub = _truck.node_list[_truck.edge_list.index(_edge)]
                     # it must exist by defination and above filtered
@@ -342,6 +295,11 @@ for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
                         right_hub_options.append(dp_node_id)
                         dp_node_id += 1
                     else:
+                        # if not t_next in depart_time_list:
+                        #     _truck.dp_graph.add_node(dp_node_id,left_time=t_next,right_time=t_next+this_edge_duration,edge=_edge,hub=_hub)
+                        #     right_hub_options.append(dp_node_id)
+                        #     dp_node_id += 1
+                            # this is the option that a truck shall wait to the integer point travel
                         for depart_time in depart_time_list:
                             _truck.dp_graph.add_node(dp_node_id,left_time=depart_time,right_time=depart_time+this_edge_duration,edge=_edge,hub=_hub)
                             right_hub_options.append(dp_node_id)
@@ -355,7 +313,7 @@ for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
                                 wait_seconds    = wait_time_delta.total_seconds()
                                 if wait_seconds != 0:
                                     # this is not a non-stop option
-                                    wait_seconds += next_period_resolution * 60 # because the Discretization, we do not want underestimate the waiting cost
+                                    wait_seconds += planning_resolution * 60 # because the Discretization, we do not want underestimate the waiting cost
                                 edge_weight     = _truck.caculate_dp_edge_weight(_edge,agg_qty[_index],ego_qty[_index],wait_seconds)
                                 _truck.dp_graph.add_edge(dp_node_left,dp_node_right,weight=edge_weight,wait_time=wait_seconds)                                
 
@@ -363,23 +321,31 @@ for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
                     t_earliest          += this_edge_duration
                     left_hub_options    = right_hub_options
                     right_hub_options   = []
-                # now we put a virtual destination 
+                    # now we put a virtual destination 
                     _truck.dp_graph.add_node(dp_node_id)
                     for dp_node in left_hub_options:
                         _truck.dp_graph.add_edge(dp_node,dp_node_id,weight=0) # no cost after arrive destination
                         # this is to say, once the waiting time at the second last hub is determined, no more decisons
+                    
+                    # the truck will update its planning based on such dp graph
+                    path_raw = _truck.optimize_plan(dp_node_id)
+                    _truck.update_waiting_plan(path_raw)
+            [is_a_depart_clk,depart_node] = _truck.is_now_the_departuing_clk(CLK.current_clk,communication_period)[0]
+            if is_a_depart_clk:
+                # this is the timing of this truck to depart current hub
+                # register this to a global check list, that we know true platooning
+                if actual_on_edge_trucks[depart_node] == None:
+                    actual_on_edge_trucks[depart_node] = []
+                actual_on_edge_trucks[depart_node].append(_truck.truck_index)
+            _truck.platooning_partener = []
 
-               
-                # the truck will update its planning based on such dp graph
-                path_raw = _truck.optimize_plan(dp_node_id)
-                _truck.update_waiting_plan(path_raw)
-                print('\nDP graph shortest path generated and updated to waiting plan for this truck',_truck.truck_index)
-        
-    #loop_counter += 1s
+    # check through all adges
+    for _edge_index in range(0,M.n_of_edge):
+        if not actual_on_edge_trucks[_edge_index] == None:
+            for _truck_index in actual_on_edge_trucks:
+                _carrier_index = truck_list[_truck_index].carrier_index
+                _t_order_interanl = carrier_list[_carrier_index].truck_index_list.index(_truck_index)
+                _list_to_add      = actual_on_edge_trucks[_edge_index].remove(_truck_index)
+                carrier_list[_carrier_index].truck_list[_t_order_interanl].platooning_partener += _list_to_add
 
-
-        
-
-
-
-
+    CLK.clock_step_plus_ms(communication_period) # move to the next time

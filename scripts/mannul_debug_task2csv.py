@@ -3,7 +3,7 @@
 from map import GeoMap
 from truck_swarm_parameters import TruckSwarm
 from datetime import timedelta,datetime
-from truck_parameter import Truck
+from scripts.truck_methods import Truck
 
 import csv
 

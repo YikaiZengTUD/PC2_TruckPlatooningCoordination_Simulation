@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 # This is the class defination file for the geographical map
-from truck_parameter import Truck
+# from truck_methods import Truck
 class GeoMap:
 
     def __init__(self,map_coord:dict) -> None:
