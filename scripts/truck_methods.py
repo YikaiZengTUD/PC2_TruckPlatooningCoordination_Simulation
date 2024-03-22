@@ -2,7 +2,7 @@
 
 from datetime import datetime,timedelta
 import networkx as nx
-import numpy as np
+# import numpy as np
 class Truck:
     
     def __init__(
@@ -95,7 +95,7 @@ class Truck:
             _clk_of_this_departure  =  _clk_of_arrival        + timedelta(seconds=self.waiting_plan[_pointer-1])
             _clk_of_next            =  _clk_of_this_departure + timedelta(seconds=self.travel_duration[_pointer-1]) - timedelta(seconds=60)
 
-            if this_clk < _clk_of_this_departure:
+            if this_clk <= _clk_of_this_departure:
                 # still waiting at this hub
                 self.current_node = self.node_list[_pointer-1]
                 # not at any edge
@@ -125,9 +125,9 @@ class Truck:
         _d_time = self.start_time + timedelta(seconds=60)
         for _node_index,_node in enumerate(self.node_list):
             if _node_index == 0:
-                _d_time = _d_time + timedelta(self.waiting_plan[_node_index])
+                _d_time = _d_time + timedelta(seconds=self.waiting_plan[_node_index])
             else:
-                _d_time = _d_time + timedelta(self.travel_duration[_node_index-1]+self.waiting_plan[_node_index])
+                _d_time = _d_time + timedelta(seconds=self.travel_duration[_node_index-1]+self.waiting_plan[_node_index])
             depature_time.append(_d_time)
         return depature_time
     
@@ -135,7 +135,7 @@ class Truck:
         # return (True/False, the node_index)
         for _n_order,_node_index in enumerate(self.node_list):
             if _n_order == 0:
-                _this_arrival_time = self.start_time
+                _this_arrival_time = self.start_time + timedelta(seconds=5)
                 # first node
             else:
                 _this_arrival_time += self.waiting_plan[_n_order-1] + self.travel_duration[_n_order-1]
@@ -251,7 +251,7 @@ class Truck:
         if self.current_edge == -1:
             # the truck is on a node
             if self.current_node == hub_index:
-                t_e = now_clk + timedelta(seconds=60)
+                t_e = now_clk + timedelta(seconds=55) # the are 5 seconds are there use for communication
                 t_l = t_e + timedelta(seconds=self.waiting_buddget)
             else:
                 i1 = self.node_list.index(self.current_node)
@@ -287,31 +287,44 @@ class Truck:
         return cost_edge
     
     def exclude_this_truck_from_this_hub_plan(self,options_raw:list,hub_index:int) -> list:
-        depart_time_ego = options_raw[2]
-        depart_time_agg = options_raw[3]
+        depart_time_ego = options_raw[2].copy()
+        depart_time_agg = options_raw[3].copy()
 
-        qty_ego = options_raw[1]
-        qty_agg = options_raw[0]
+        qty_ego = options_raw[1].copy()
+        qty_agg = options_raw[0].copy()
 
-        qty_ego_sorted = qty_ego
-        qty_agg_sorted = qty_agg
 
         time_list_sorted = sorted(depart_time_agg)
-        for _t_index,_timing in enumerate(time_list_sorted):
-            qty_agg_sorted[_t_index] = qty_agg[depart_time_agg.index(_timing)]
-            qty_ego_sorted[_t_index] = qty_ego[depart_time_ego.index(_timing)]
+        # for _t_index,_timing in enumerate(time_list_sorted):
+        #     qty_agg_sorted[_t_index] = qty_agg[depart_time_agg.index(_timing)]
+        #     # some time exist only in agg time
+        #     qty_ego_sorted[_t_index] = qty_ego[depart_time_ego.index(_timing)]
+
+        qty_ego_sorted = [0] * len(time_list_sorted)
+        qty_agg_sorted = [0] * len(time_list_sorted)      
+
+        for _t_index,_timing in enumerate(depart_time_agg):
+            _index = time_list_sorted.index(_timing)
+            qty_agg_sorted[_index] = qty_agg[_t_index]
+        
+        for _t_index,_timing in enumerate(depart_time_ego):
+            _index = time_list_sorted.index(_timing)
+            qty_ego_sorted[_index] = qty_ego[_t_index]
 
         qty_ego = qty_ego_sorted
         qty_agg = qty_agg_sorted
-
-        if len(depart_time_agg) != len(depart_time_ego):
-            print('Error: Inconsistent in planning Aggreated and Ego')
+        # Above we sort the depart time list
+        # Now we exclude the truck itself from the list
+        [t_a,t_d] = self.answer_my_plan_at_hub(hub_index)
+        if t_d.second == 0 and t_d.microsecond == 0:
+            t_round = t_d
         else:
-            [t_a,t_d] = self.answer_my_plan_at_hub(hub_index)
-            t_round   = t_d.replace(second=0,microsecond=0)
-            _this_truck_index = depart_time_agg.index(t_round)
-            qty_ego[_this_truck_index] -= 1
-            qty_agg[_this_truck_index] -= 1
+            t_round   = t_d.replace(second=0,microsecond=0) + timedelta(minutes=1)
+
+        _this_truck_index = depart_time_agg.index(t_round)
+        qty_ego[_this_truck_index] -= 1
+        qty_agg[_this_truck_index] -= 1
+
         return [time_list_sorted,qty_agg,qty_ego]
     
     def exclude_this_truck_for_this_edge_plan(self,options_raw:list,edge_index:int) -> list:
@@ -347,19 +360,37 @@ class Truck:
                 # if edge_attributes['wait_time'] > 0:
                 #     print('change of plans',self.truck_index)
         _node_order = self.node_list.index(self.current_node)
-        self.waiting_plan[_node_order:-1] = waiting_times
+        self.waiting_plan[_node_order:] = waiting_times
+        if len(self.waiting_plan) != len(self.node_list):
+            print('Error!')
+        # this should also affect the planning matrix
+        
 
     def is_now_the_departuing_clk(self,current_clk:datetime,time_gap:int) -> bool:
         for _n_order,_node_index in enumerate(self.node_list):
             if _n_order == 0:
-                _this_depart_time = self.start_time + self.waiting_plan[0]
+                _this_depart_time = self.start_time + timedelta(seconds=self.waiting_plan[0]) + timedelta(seconds=60)
             else:
                 _this_depart_time += self.waiting_plan[_n_order] + self.travel_duration[_n_order-1]
-            if current_clk >= _this_depart_time and current_clk < _this_depart_time + timedelta(microseconds=time_gap)
-                return (True,_node_index)
+            if current_clk >= _this_depart_time and current_clk <= _this_depart_time + timedelta(microseconds=time_gap):
+               if _n_order == len(self.node_list) - 1:
+                return (False,-1)
+               else:
+                _edge_index = self.edge_list[_n_order]
+                return (True,_edge_index)
             else:
                 return (False,-1)
-            
+    
+    def use_waiting_budget(self) -> None:
+        # This is still on the boudary
+        _order  = self.node_list.index(self.current_node)
+        self.waiting_buddget = self.waiting_plan[_order]
+        # if self.edge_list == -1:
+        #     print('Error: Truck not yet departure')
+        # else:
+        #     _order = self.edge_list.index(self.current_edge)
+        #     self.waiting_buddget = self.waiting_plan[_order]
+
 if __name__ == '__main__':
     test_nodes = [
         (18.02546160254861, 59.38157382906624), 

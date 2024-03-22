@@ -89,3 +89,11 @@ class Encrpytion_Platfrom:
         sub_index = self.answer_subgraph_index_of_this_carrier(carrier_index)
         sub_graph = self.qualified_sub_graphs[sub_index]
         return len(list(sub_graph.nodes))
+    
+    def check_if_enc_communiation_between_two_carriers(self,carrier1:int,carrier2:int) -> bool:
+        sub1 = self.answer_subgraph_index_of_this_carrier(carrier1)
+        sub2 = self.answer_subgraph_index_of_this_carrier(carrier2)
+        if sub1 == sub2:
+            return True
+        else:
+            return False

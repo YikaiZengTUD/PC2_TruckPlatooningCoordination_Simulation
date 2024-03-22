@@ -134,8 +134,8 @@ Carriers, trucks appear one by one as time goes and will disapear (goes offline)
 
 EP = Encrpytion_Platfrom(key=public_key)
 
-for _carrier in carrier_list:
-    _carrier.load_truck_plan_into_table(base_line_clk = CLK.current_clk)
+# for _carrier in carrier_list:
+#     _carrier.load_truck_plan_into_table(base_line_clk = CLK.current_clk)
 
 # set up for progress bar
 Total_length    = max_operating_time - min(truck_online_time)
@@ -143,7 +143,6 @@ total_length_ms = Total_length.total_seconds() * 1000
 loop_counter = 0
 
 total_iterations = int(total_length_ms) // communication_period + 1
-loop_counter = 0
 
 for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
     
@@ -173,11 +172,13 @@ for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
                 _in_this_platoon = _truck.platooning_partener # itself should be excluded
                 if not len(_in_this_platoon) == 0:
                     # _carrier_index = _truck.carrier_index
-                    for _truck_in_platoon in _in_this_platoon:
-                        if _truck_in_platoon.carrier_index != _truck.carrier_index:
-                            if not _truck_in_platoon.carrier_index in _carrier.neighoring_carrier_index:
-                                _carrier.neighoring_carrier_index.append(_truck_in_platoon.carrier_index)
-                
+                    for _truck_index_in_platoon in _in_this_platoon:
+                        partener_carrier_index = Simu_Setter.truck_2_carrier[_truck_index_in_platoon]
+                        if partener_carrier_index != _truck.carrier_index:
+                            if not partener_carrier_index in _carrier.neighoring_carrier_index:
+                                _carrier.neighoring_carrier_index.append(partener_carrier_index)
+
+
     # Now check node by node, to generate add neighbor to the list
     for _node_index in range(M.n_of_node):
         this_node_trucks_list = trucks_in_this_node[_node_index]
@@ -202,51 +203,63 @@ for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
                 Assumption: Now the carrier will send its neighboring information the EP, the EP is to deciede who will 
                 be doing secrective averaging
     
-                ''' 
+                '''
 
-    EP.init_communication_graph()
-
-    for _carrier in carrier_list:
-    
-        if len(_carrier.neighoring_carrier_index) > 0:
-            # there is some neighbor
-            EP.process_carrier_neighbor_list(_carrier.neighoring_carrier_index)
-            # The EP is about to first build a (very likely not connected graph)
-    
-    # Now the encryption platform must find sub groups that is internally connected 
-    # and have at least three members
-
-    EP.encryption_platform_prepare()
-    # in this process, the platform knows which carrier is okay to provide service
-
-    if loop_counter > 0 and loop_counter % (planning_resolution * 60/communication_period) == 0:
+    if loop_counter >= 0 and loop_counter % (planning_resolution * 60 * 1000/communication_period) == 0:
         cur_table_base = CLK.current_clk
+        EP.init_communication_graph()
         for _carrier in carrier_list:
-            _carrier.row_rolling_plan_table(CLK.current_clk)
-    loop_counter += 1
-    # carrier -> EP: send secretive parts to the platform
-    for _carrier in carrier_list:
-    # but if not qualified, nothing happens
-        if EP.answer_if_qualified(_carrier.carrier_index):
-            # the carrier is qualified
-            [A,_carrier.secret_part_kept] = _carrier.split_plan_table_into_two_part()
-            EP.recieve_carrier_data(_carrier.carrier_index,A)
-    
-    # for _carrier in carrier_list:
-    #     if EP.answer_if_qualified(_carrier.carrier_index):
-            
-    EP.redistribute_secret_parts()
-    # EP -> carriers: send back data if qualified
-    for _carrier in carrier_list:
-        if EP.answer_if_qualified(_carrier.carrier_index):
-            _carrier.encrypted_data = EP.answer_distribute_values(_carrier.carrier_index) + _carrier.secret_part_kept
+            _carrier.load_truck_plan_into_table(base_line_clk = cur_table_base) 
+            # this load will overwrite the result in the last gap, which we allow this repeat so a new carrier may join
+            # current setup : the dynamic averaging happens in this 60s window, during which, the change in the planning remain
+            # less affective to the convergence 
+            if len(_carrier.neighoring_carrier_index) > 0:
+                # there are some neighbor
+                EP.process_carrier_neighbor_list(_carrier.neighoring_carrier_index)
+                # The EP is about to first build a (very likely not connected graph)
+        EP.encryption_platform_prepare()
+        # in this process, the platform knows which carrier is okay to provide service
+        # Now the encryption platform must find sub groups that is internally connected 
+        # and have at least three members
+        
+        for _carrier in carrier_list:
+            # _carrier.carrier_qty_est = 1 # reset
+            # _carrier.row_rolling_plan_table(CLK.current_clk)
+            _carrier.enc_service_flag = True
+            # call this service every rolling-in all new data timing
+                # but if not qualified, nothing happens
+            if EP.answer_if_qualified(_carrier.carrier_index) and _carrier.enc_service_flag:
+                # the carrier is qualified
+                [A,_carrier.secret_part_kept] = _carrier.split_plan_table_into_two_part()
+                # carrier -> EP: send secretive parts to the platform
+                EP.recieve_carrier_data(_carrier.carrier_index,A)
+        EP.redistribute_secret_parts() # EP -> carriers: send back data if qualified
+    else:
+        for _carrier in carrier_list:
+            _carrier.enc_service_flag = False
 
+    loop_counter += 1
+    # com attempts made every loop
+    for _carrier in carrier_list:
+        if EP.answer_if_qualified(_carrier.carrier_index) and _carrier.enc_service_flag:
+            _carrier.encrypted_data = EP.answer_distribute_values(_carrier.carrier_index) + _carrier.secret_part_kept
+            _carrier.enc_data_table_base = cur_table_base
+        
     # The third party service has been finished, we do it once every minute
     # if qualified, then a carrier may randomly chose a neighbor to contact
     for _carrier in carrier_list:
         if not EP.answer_if_qualified(_carrier.carrier_index):
             continue # not qualified, no information exchanged
+        if len(_carrier.neighoring_carrier_index) == 0:
+            continue # topology broken but not yet updated to the EP
+
         _selected_neighbor_index = _carrier.select_a_random_neighbor()
+
+        # what may gose wrong now is that, at this point, a new neighbor, who has not been through EP may 
+        # already be a new neighbor -> 
+        if not EP.check_if_enc_communiation_between_two_carriers(_carrier.carrier_index,_selected_neighbor_index):
+            continue # fail to find a qualified at this trial, may not have one at all, thus abort, no retry
+
         _neighbor = carrier_list[Simu_Setter.carrier_index_list.index(_selected_neighbor_index)]
         _avg_data = (_carrier.encrypted_data + _neighbor.encrypted_data)/2
         _carrier.encrypted_data     = _avg_data
@@ -254,18 +267,18 @@ for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
         carrier_list[Simu_Setter.carrier_index_list.index(_selected_neighbor_index)] = _neighbor
         _carrier.get_current_carrier_number(EP.answer_subgraph_number(_carrier.carrier_index))
     
-    actual_on_edge_trucks = {}
+    actual_on_edge_trucks_this_clk = {} # this variable records the depart data of this timing
     # this is used to register actually on edge trucks that we update (platoonig_partener) of every truck
     # this is done by simulation setter, as in the real world, the truck depature within the same time will be treated as a platoon
-
     #  check now if a truck arriving the hub
     for _carrier in carrier_list:
-        _carrier.decode_agg_truck_table() # for those who are not connected, this will just pass through
+        _carrier.decode_agg_truck_table(cur_table_base) # for those who are not connected, this will just pass through
         for _truck in _carrier.truck_list:
             is_a_arriving_clk = _truck.is_now_the_arrving_clk(CLK.current_clk,communication_period)[0]
             if is_a_arriving_clk:
             # This is the moment that is 60s towards before the physical hub
             # The optimization process for the hub is triggered
+                _truck.platooning_partener = []  # when at hub, the platoonig ends virtually
                 _truck.dp_graph = nx.DiGraph()      
                 _truck.dp_graph.add_node(
                     0,
@@ -285,8 +298,9 @@ for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
                     options_raw = _carrier.answer_known_departure_list_for_this_edge(_edge,window_e,window_l,cur_table_base)
                     # These data include the truck itself, now we have to exclude it so that a fair comparsion is made
                     # we also sort the timing list in the following function
+
                     [depart_time_list,agg_qty,ego_qty] = _truck.exclude_this_truck_for_this_edge_plan(options_raw,_edge)
-                    # build dp graph from this result hub by hub
+                    # build dp graph from this result edge by edge
                     # this hub is one of concerned -> It must get contained in the agg data and ego data
                     this_edge_duration = timedelta(seconds=_truck.travel_duration[_truck.edge_list.index(_edge)])
                     if not t_earliest in depart_time_list:
@@ -322,30 +336,50 @@ for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
                     left_hub_options    = right_hub_options
                     right_hub_options   = []
                     # now we put a virtual destination 
-                    _truck.dp_graph.add_node(dp_node_id)
-                    for dp_node in left_hub_options:
-                        _truck.dp_graph.add_edge(dp_node,dp_node_id,weight=0) # no cost after arrive destination
-                        # this is to say, once the waiting time at the second last hub is determined, no more decisons
+                _truck.dp_graph.add_node(dp_node_id)
+                for dp_node in left_hub_options:
+                    _truck.dp_graph.add_edge(dp_node,dp_node_id,weight=0,wait_time=0) # no cost after arrive destination
+                    # this is to say, once the waiting time at the second last hub is determined, no more decisons
                     
-                    # the truck will update its planning based on such dp graph
-                    path_raw = _truck.optimize_plan(dp_node_id)
-                    _truck.update_waiting_plan(path_raw)
-            [is_a_depart_clk,depart_node] = _truck.is_now_the_departuing_clk(CLK.current_clk,communication_period)[0]
+                # the truck will update its planning based on such dp graph
+                path_raw = _truck.optimize_plan(dp_node_id)
+                _truck.update_waiting_plan(path_raw)
+                # this will affect the carrier's planning
+
+            [is_a_depart_clk,depart_edge] = _truck.is_now_the_departuing_clk(CLK.current_clk,communication_period)
             if is_a_depart_clk:
                 # this is the timing of this truck to depart current hub
                 # register this to a global check list, that we know true platooning
-                if actual_on_edge_trucks[depart_node] == None:
-                    actual_on_edge_trucks[depart_node] = []
-                actual_on_edge_trucks[depart_node].append(_truck.truck_index)
-            _truck.platooning_partener = []
+                if not depart_edge in actual_on_edge_trucks_this_clk.keys():
+                    actual_on_edge_trucks_this_clk[depart_edge] = []
+                _truck.use_waiting_budget() # cut down waiting budget
 
-    # check through all adges
-    for _edge_index in range(0,M.n_of_edge):
-        if not actual_on_edge_trucks[_edge_index] == None:
-            for _truck_index in actual_on_edge_trucks:
-                _carrier_index = truck_list[_truck_index].carrier_index
-                _t_order_interanl = carrier_list[_carrier_index].truck_index_list.index(_truck_index)
-                _list_to_add      = actual_on_edge_trucks[_edge_index].remove(_truck_index)
-                carrier_list[_carrier_index].truck_list[_t_order_interanl].platooning_partener += _list_to_add
+                actual_on_edge_trucks_this_clk[depart_edge].append(_truck.truck_index)
+            # _truck.platooning_partener = [] 
+        # now the carrier shall prepare the new enc data for next communication
+        if is_a_arriving_clk:
+            _carrier.update_encryption_data(cur_table_base) # if there is 
+
+    # check through all adge
+    for _edge_index in actual_on_edge_trucks_this_clk.keys():
+        if len(actual_on_edge_trucks_this_clk[_edge_index]) >= 2:
+            for _truck_index in actual_on_edge_trucks_this_clk[_edge_index]:
+                _carrier_index      = truck_list[_truck_index].carrier_index
+                _carrier_order      = Simu_Setter.carrier_index_list.index(_carrier_index)
+                _in_truck_order     = carrier_list[_carrier_order].truck_index_list.index(_truck_index)
+                _list_to_add        = actual_on_edge_trucks_this_clk[_edge_index].copy()
+                _list_to_add.pop(_list_to_add.index(_truck_index))
+                # _list = carrier_list[_carrier_order].truck_list[_in_truck_order].platooning_partener
+                # _list = _list + _list_to_add
+                carrier_list[_carrier_order].truck_list[_in_truck_order].platooning_partener += _list_to_add
+    Simu_Setter.register_this_on_edge_timing(actual_on_edge_trucks_this_clk,CLK.current_clk)
+    # This part is for the simulation handler to record result
+    for _carrier in carrier_list:
+        for _truck in _carrier.truck_list:
+            [is_a_depart_clk,depart_edge] = _truck.is_now_the_departuing_clk(CLK.current_clk,communication_period)
+            if is_a_depart_clk:
+                Simu_Setter.register_this_traveledge_cost(_truck)
 
     CLK.clock_step_plus_ms(communication_period) # move to the next time
+
+Simu_Setter.save_fuel_cost_result()

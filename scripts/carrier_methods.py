@@ -24,6 +24,8 @@ class Carrier:
         self.public_prime           = public_prime
         self.carrier_qty_est        = 1
 
+        self.enc_data_table_base = datetime(2000,1,1,0,0,0,0)
+
         self.neighoring_carrier_index = []
         # self.encrypted_data
         # self.secret_part_kept       = np.array()
@@ -32,6 +34,8 @@ class Carrier:
         # self.next_period_plan_matrix = np.array()
 
         # self.next_period_plan_matrix_memory = self.next_period_plan_matrix
+
+        self.enc_service_flag = False
 
     def add_truck_into_this_carrier(self,truck2add:Truck) -> None:
         self.truck_list.append(truck2add)
@@ -60,6 +64,7 @@ class Carrier:
         return np.zeros((n_of_rows, n_of_cols))
     
     def load_truck_plan_into_table(self,base_line_clk:datetime) -> None:
+        _temp = np.zeros(self.next_period_plan_matrix.shape)
         for _truck in self.truck_list:
             _this_truck_departure_time = _truck.generate_depature_time_list()
             for _relative_node_order,_d_time in enumerate(_this_truck_departure_time):
@@ -69,14 +74,20 @@ class Carrier:
                 if _d_time < base_line_clk + timedelta(minutes=self.future_range) and _d_time >= base_line_clk:
                     # +1 for the corresponding matrix
                     # determine which row it is gonna be
+                    # the row time window is (left,right]
                     _gap = _d_time - base_line_clk
                     n_of_row = int(_gap.total_seconds()/60)
+                    if _gap.total_seconds() % 60 == 0:
+                        n_of_row += -1
+                    if n_of_row < 0:
+                        n_of_row = 0
                     # we now need to select the edge
                     n_of_col = _truck.edge_list[_relative_node_order]
                     # n_of_col = _truck.node_list[_relative_node_order]
-                    self.next_period_plan_matrix[n_of_row,n_of_col] += 1
+                    _temp[n_of_row,n_of_col] += 1
                 else:
                     break
+        self.next_period_plan_matrix = _temp
     
     def select_communication_slot(self,max_slot:int):
         self.current_slot_com = random.randint(1,max_slot)
@@ -219,16 +230,18 @@ class Carrier:
         # start time is the current matrix base
         # so it means everything happens in this timeframe are considered happend together
         # (A row in the time plan matrix)
-
+        # self.next_period_agg = self.encrypted_data
         if start_time < table_base_clk + timedelta(minutes=self.time_resolution*self.future_range):
-            edge_array_raw = self.next_period_agg[:,edge_index]
-            sum_col        = (edge_array_raw % self.public_prime) * self.carrier_qty_est
+            # something make senses in this window
+            edge_array_raw = self.next_period_agg[:,edge_index].copy()
+            sum_col        = (edge_array_raw) % self.public_prime
 
             for row_index,row in enumerate(list(sum_col)):
                 if row == 0:
                     continue
                 else:
-                    this_time = start_time + timedelta(minutes=(row_index-1) * self.time_resolution)
+                    this_time = table_base_clk + timedelta(minutes=(row_index + 1) * self.time_resolution)
+                    # the depart time is set at the latest of this window
                     if this_time <= end_time:
                         agg_depart_time.append(this_time)
                         agg_qty.append(row)
@@ -237,7 +250,10 @@ class Carrier:
             if edge_index in _truck.edge_list:
                 [t_a,t_d] = _truck.answer_my_plan_at_hub(_truck.node_list[_truck.edge_list.index(edge_index)])
                 if t_d >= start_time and t_d <= end_time:
-                    _t_round = t_d.replace(second=0,microsecond=0)
+                    if t_d.second == 0 and t_d.microsecond == 0:
+                        _t_round = t_d
+                    else:
+                        _t_round = t_d.replace(second=0,microsecond=0) + timedelta(minutes=self.time_resolution)
                     # this round time should exist in the list already
                     if _t_round in ego_depart_time:
                         ego_qty[ego_depart_time.index(_t_round)] += 1
@@ -277,8 +293,56 @@ class Carrier:
     def select_a_random_neighbor(self) -> int:
         return random.choice(self.neighoring_carrier_index)
     
-    def decode_agg_truck_table(self) -> None:
-        if self.carrier_qty_est > 1:
-            self.next_period_agg = np.round(self.encrypted_data * self.carrier_qty_est)
+    def decode_agg_truck_table(self,cur_table_base:datetime) -> None:
+        # if self.carrier_qty_est > 1:
+        #     self.next_period_agg = np.round(self.encrypted_data * self.carrier_qty_est)
+        # else:
+        #     self.next_period_agg = self.next_period_plan_matrix
+        if cur_table_base  - self.enc_data_table_base > timedelta(minutes=self.future_range):
+            # there is no information in my enc buffer, it may not even exist
+            self.next_period_agg = self.next_period_plan_matrix # use all my information
         else:
-            self.next_period_agg = self.next_period_plan_matrix
+            _gap        = (cur_table_base  - self.enc_data_table_base).total_seconds()
+            _gap_row    = int(_gap/(self.time_resolution * 60))
+            if not _gap_row == 0:
+                _temp       = np.round(self.encrypted_data * self.carrier_qty_est)
+                _temp_valid = _temp[_gap_row:]
+                _ego_comp   = self.next_period_plan_matrix[-_gap_row:]
+                self.next_period_agg = np.vstack((_temp_valid,_ego_comp))
+            else:
+                self.next_period_agg = np.round(self.encrypted_data * self.carrier_qty_est)
+
+
+
+    def update_encryption_data(self,base_clk:datetime) -> None:
+        new_plan = self.return_current_ego_plan_in_matrix(base_clk)
+        diff_mat = new_plan - self.next_period_plan_matrix
+        try:
+            self.encrypted_data += diff_mat # changes are loaded in
+            self.next_period_plan_matrix = new_plan
+        except:
+            pass
+
+    def return_current_ego_plan_in_matrix(self,base_clk:datetime) -> np.array:
+        temp = np.zeros(shape=self.next_period_plan_matrix.shape)
+        base_line_clk = base_clk
+        for _truck in self.truck_list:
+            _this_truck_departure_time = _truck.generate_depature_time_list()
+            for _relative_node_order,_d_time in enumerate(_this_truck_departure_time):
+                if _relative_node_order == len(_this_truck_departure_time) - 1:
+                    # this is the last node
+                    break
+                if _d_time < base_line_clk + timedelta(minutes=self.future_range) and _d_time >= base_line_clk:
+                    # +1 for the corresponding matrix
+                    # determine which row it is gonna be
+                    _gap = _d_time - base_line_clk
+                    n_of_row = int(_gap.total_seconds()/60) - 1
+                    if n_of_row < 0:
+                        n_of_row = 0
+                    # we now need to select the edge
+                    n_of_col = _truck.edge_list[_relative_node_order]
+                    # n_of_col = _truck.node_list[_relative_node_order]
+                    temp[n_of_row,n_of_col] += 1
+                else:
+                    break
+        return temp

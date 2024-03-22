@@ -2,6 +2,8 @@
 from datetime import datetime,timedelta
 import csv
 import random
+from truck_methods import Truck
+import json
 
 class global_handler:
 
@@ -12,6 +14,15 @@ class global_handler:
         self.carrier_index_list = []
         if self.amount < 5000:
             self.generate_virtual_random_truck_index()
+        
+        self.truck_2_carrier = {}
+
+        self.truck_result = {}
+        self.on_edge_result = {}
+
+        self.t_cost     = 25/3600  # euro/seconds
+        self.t_travel   = 56/3600  # euro/seconds
+        self.xi         = 0.1 
     
     def collect_travel_duration(self,data:dict) -> dict:
         ts_time_duration_dict = {}
@@ -108,6 +119,7 @@ class global_handler:
                     
         if not f_i in self.carrier_index_list:
             self.carrier_index_list.append(f_i) # record all carrier index in this simulation
+        self.truck_2_carrier[truck_index] = f_i
         return f_i
     
     def next_int_row_clk(self,this_clk:datetime,base_clk:datetime,table_resolution:int) -> datetime:
@@ -116,4 +128,33 @@ class global_handler:
         row_lower = time_gap_seconds/(table_resolution * 60)
         return base_clk + timedelta(minutes=table_resolution*(row_lower+1))
     
-        
+    def register_this_traveledge_cost(self,truck:Truck) -> None:
+
+        n_of_partener = len(truck.platooning_partener)
+
+        fuel_cost = truck.travel_duration[truck.node_list.index(truck.current_node)] * (self.t_travel)
+        time_cost = truck.travel_duration[truck.node_list.index(truck.current_node)] * (self.t_cost)
+
+        _factor = (1 + (1 - self.xi) * n_of_partener) / ( 1 + n_of_partener)
+        cost = fuel_cost * _factor + time_cost
+
+        if not truck.truck_index in self.truck_result.keys():
+            _index = truck.truck_index
+            self.truck_result[_index] = []
+
+
+        self.truck_result[truck.truck_index].append(cost)
+
+    def save_fuel_cost_result(self) -> None:
+        with open("travel_cost.txt", "w") as fp:
+            json.dump(self.truck_result,fp)
+        print('Termination: Travel cost saved to travel_cost.txt')
+
+    def register_this_on_edge_timing(self,edge_dict:dict,time:datetime) -> None:
+        if len(edge_dict) > 0:
+            self.on_edge_result[time] = edge_dict
+
+    def save_on_edge_result(self) -> None:
+        with open("on_edge.txt", "w") as fp:
+            json.dump(self.on_edge_result,fp)
+        print('Termination: Departure timing recorded')

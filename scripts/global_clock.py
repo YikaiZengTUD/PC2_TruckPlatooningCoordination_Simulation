@@ -13,7 +13,7 @@ class VirtualGlobalClock:
         print("Initialization: Virtual Clock initialized at",start_clk.strftime("%Y-%m-%d %H:%M:%S"))
 
     def clock_step_plus_ms(self,time_increment_ms:int):
-        self.current_clk = self.current_clk + timedelta(microseconds=time_increment_ms)
+        self.current_clk = self.current_clk + timedelta(microseconds=time_increment_ms*1000)
     
     def clock_step_minus_ms(self,time_decrement_ms:int):
-        self.current_clk = self.current_clk - timedelta(microseconds=time_decrement_ms)
+        self.current_clk = self.current_clk - timedelta(microseconds=time_decrement_ms*1000)
