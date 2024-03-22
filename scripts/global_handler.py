@@ -146,7 +146,7 @@ class global_handler:
         self.truck_result[truck.truck_index].append(cost)
 
     def save_fuel_cost_result(self) -> None:
-        with open("travel_cost.txt", "w") as fp:
+        with open("result/travel_cost.txt", "w") as fp:
             json.dump(self.truck_result,fp)
         print('Termination: Travel cost saved to travel_cost.txt')
 
@@ -155,6 +155,6 @@ class global_handler:
             self.on_edge_result[time] = edge_dict
 
     def save_on_edge_result(self) -> None:
-        with open("on_edge.txt", "w") as fp:
+        with open("result/on_edge.txt", "w") as fp:
             json.dump(self.on_edge_result,fp)
         print('Termination: Departure timing recorded')
