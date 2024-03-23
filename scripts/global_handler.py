@@ -129,21 +129,24 @@ class global_handler:
         return base_clk + timedelta(minutes=table_resolution*(row_lower+1))
     
     def register_this_traveledge_cost(self,truck:Truck) -> None:
+        if not truck.current_edge == -1 and truck.current_node == -1:
+            # this truck has not done
 
-        n_of_partener = len(truck.platooning_partener)
+            n_of_partener = len(truck.platooning_partener)
 
-        fuel_cost = truck.travel_duration[truck.node_list.index(truck.current_node)] * (self.t_travel)
-        time_cost = truck.travel_duration[truck.node_list.index(truck.current_node)] * (self.t_cost)
+            fuel_cost = truck.travel_duration[truck.node_list.index(truck.current_node)] * (self.t_travel)
+            time_cost = truck.travel_duration[truck.node_list.index(truck.current_node)] * (self.t_cost)
 
-        _factor = (1 + (1 - self.xi) * n_of_partener) / ( 1 + n_of_partener)
-        cost = fuel_cost * _factor + time_cost
+            _factor = (1 + (1 - self.xi) * n_of_partener) / ( 1 + n_of_partener)
+            cost = fuel_cost * _factor + time_cost
 
-        if not truck.truck_index in self.truck_result.keys():
-            _index = truck.truck_index
-            self.truck_result[_index] = []
+            if not truck.truck_index in self.truck_result.keys():
+                _index = truck.truck_index
+                self.truck_result[_index] = []
+            # else:
+            #     print('repeated')
 
-
-        self.truck_result[truck.truck_index].append(cost)
+            self.truck_result[truck.truck_index].append(cost)
 
     def save_fuel_cost_result(self) -> None:
         with open("result/travel_cost.txt", "w") as fp:
@@ -152,7 +155,7 @@ class global_handler:
 
     def register_this_on_edge_timing(self,edge_dict:dict,time:datetime) -> None:
         if len(edge_dict) > 0:
-            self.on_edge_result[time] = edge_dict
+            self.on_edge_result[time.timestamp] = edge_dict
 
     def save_on_edge_result(self) -> None:
         with open("result/on_edge.txt", "w") as fp:

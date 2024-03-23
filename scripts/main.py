@@ -346,7 +346,7 @@ for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
                 _truck.update_waiting_plan(path_raw)
                 # this will affect the carrier's planning
 
-            [is_a_depart_clk,depart_edge] = _truck.is_now_the_departuing_clk(CLK.current_clk,communication_period)
+            [is_a_depart_clk,depart_edge] = _truck.is_now_the_departing_clk(CLK.current_clk,communication_period)
             if is_a_depart_clk:
                 # this is the timing of this truck to depart current hub
                 # register this to a global check list, that we know true platooning
@@ -376,10 +376,11 @@ for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
     # This part is for the simulation handler to record result
     for _carrier in carrier_list:
         for _truck in _carrier.truck_list:
-            [is_a_depart_clk,depart_edge] = _truck.is_now_the_departuing_clk(CLK.current_clk,communication_period)
+            [is_a_depart_clk,depart_edge] = _truck.is_now_the_departing_clk(CLK.current_clk,communication_period)
             if is_a_depart_clk:
                 Simu_Setter.register_this_traveledge_cost(_truck)
 
     CLK.clock_step_plus_ms(communication_period) # move to the next time
 
 Simu_Setter.save_fuel_cost_result()
+Simu_Setter.save_on_edge_result()

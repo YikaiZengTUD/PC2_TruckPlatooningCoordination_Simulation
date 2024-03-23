@@ -139,7 +139,7 @@ class Truck:
                 # first node
             else:
                 _this_arrival_time += self.waiting_plan[_n_order-1] + self.travel_duration[_n_order-1]
-            if current_clk >= _this_arrival_time and current_clk < _this_arrival_time + timedelta(microseconds=time_gap):
+            if current_clk >= _this_arrival_time and current_clk < _this_arrival_time + timedelta(microseconds=time_gap*1000):
                 # this clk has passed the arrival time and and not yet reaching the next step
                 return (True,_node_index)
             else:
@@ -366,13 +366,13 @@ class Truck:
         # this should also affect the planning matrix
         
 
-    def is_now_the_departuing_clk(self,current_clk:datetime,time_gap:int) -> bool:
+    def is_now_the_departing_clk(self,current_clk:datetime,time_gap:int) -> bool:
         for _n_order,_node_index in enumerate(self.node_list):
             if _n_order == 0:
                 _this_depart_time = self.start_time + timedelta(seconds=self.waiting_plan[0]) + timedelta(seconds=60)
             else:
                 _this_depart_time += self.waiting_plan[_n_order] + self.travel_duration[_n_order-1]
-            if current_clk >= _this_depart_time and current_clk <= _this_depart_time + timedelta(microseconds=time_gap):
+            if current_clk >= _this_depart_time and current_clk < _this_depart_time + timedelta(microseconds=time_gap*1000):
                if _n_order == len(self.node_list) - 1:
                 return (False,-1)
                else:
@@ -384,7 +384,8 @@ class Truck:
     def use_waiting_budget(self) -> None:
         # This is still on the boudary
         _order  = self.node_list.index(self.current_node)
-        self.waiting_buddget = self.waiting_plan[_order]
+        #_order = self.edge_list.index(self.current_edge)
+        self.waiting_buddget -= self.waiting_plan[_order]
         # if self.edge_list == -1:
         #     print('Error: Truck not yet departure')
         # else:
