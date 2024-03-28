@@ -40,6 +40,8 @@ class Truck:
         self.last_node          = -1
         self.platooning_partener = [] # start with no partener
 
+        self.finish_flag        = False
+
         # platooning settings
         self.t_cost     = 25/3600  # euro/seconds
         self.t_travel   = 56/3600  # euro/seconds
@@ -59,17 +61,6 @@ class Truck:
             edge = [node,self.node_list[itx+1]]
             edge_dict[itx] = edge 
         return edge_dict
-    
-    def give_current_node(self) -> int:
-        return self.current_node
-    
-    def arrive_node(self,target_node:int,current_edge:int) -> None:
-        self.current_node = target_node
-        self.current_edge = -1
-    
-    def get_on_edge(self,target_edge:int) -> None:
-        self.current_node = -1
-        self.current_edge = target_edge
 
     def generate_edge_list(self,global_edge_list:list) -> None:
         self.edge_list = []
@@ -116,6 +107,7 @@ class Truck:
                     self.last_node    = -1 
                     self.current_node = -1
                     self.current_edge = -1
+                    self.finish_flag  = True
                     # This truck goes offline -> it disappear from the 'real' map
                     break
 
@@ -138,12 +130,12 @@ class Truck:
                 _this_arrival_time = self.start_time + timedelta(seconds=5)
                 # first node
             else:
-                _this_arrival_time += self.waiting_plan[_n_order-1] + self.travel_duration[_n_order-1]
+                _this_arrival_time += timedelta(seconds=self.travel_duration[_n_order-1] + self.waiting_plan[_n_order-1])
             if current_clk >= _this_arrival_time and current_clk < _this_arrival_time + timedelta(microseconds=time_gap*1000):
                 # this clk has passed the arrival time and and not yet reaching the next step
                 return (True,_node_index)
-            else:
-                return (False,-1)
+            
+        return (False,-1)
 
     def answer_my_plan_at_hub(self,node_index:int) -> list:
         if node_index in self.node_list:
@@ -243,21 +235,16 @@ class Truck:
         return self.start_time + timedelta(seconds=sum(self.travel_duration) + self.waiting_buddget)
 
     def answer_time_window_at_hub(self,hub_index:int,now_clk:datetime) -> list:
-        # this function is only called after generate incoming hubs, thus no past hubs will be checked here
-        # the earlist time is either right now or travel there without any stop
-
-        # also
-
         if self.current_edge == -1:
-            # the truck is on a node
-            if self.current_node == hub_index:
-                t_e = now_clk + timedelta(seconds=55) # the are 5 seconds are there use for communication
+            _hub_order = self.node_list.index(hub_index)
+            if _hub_order == 0:
+                t_e = self.start_time + timedelta(seconds=60)
                 t_l = t_e + timedelta(seconds=self.waiting_buddget)
             else:
-                i1 = self.node_list.index(self.current_node)
-                i2 = self.node_list.index(hub_index)
-                t_travel = sum(self.travel_duration[i1:i2])
-                t_e = now_clk + timedelta(seconds=t_travel)
+                t_start = self.start_time + timedelta(seconds=60)
+                d1  = sum(self.waiting_plan[:_hub_order]) 
+                d2  = sum(self.travel_duration[:_hub_order])
+                t_e = t_start + timedelta(seconds=d1+d2)
                 t_l = t_e + timedelta(seconds=self.waiting_buddget)
             return [t_e,t_l]
         else:
@@ -371,26 +358,28 @@ class Truck:
             if _n_order == 0:
                 _this_depart_time = self.start_time + timedelta(seconds=self.waiting_plan[0]) + timedelta(seconds=60)
             else:
-                _this_depart_time += self.waiting_plan[_n_order] + self.travel_duration[_n_order-1]
+                _this_depart_time += timedelta(seconds=self.travel_duration[_n_order-1] + self.waiting_plan[_n_order-1])
             if current_clk >= _this_depart_time and current_clk < _this_depart_time + timedelta(microseconds=time_gap*1000):
                if _n_order == len(self.node_list) - 1:
                 return (False,-1)
                else:
                 _edge_index = self.edge_list[_n_order]
                 return (True,_edge_index)
-            else:
-                return (False,-1)
+        return (False,-1)
     
     def use_waiting_budget(self) -> None:
+        if self.current_edge == -1 and self.current_node == -1:
+            pass
+        else:
+            if self.current_edge == -1:
+                _order  = self.node_list.index(self.current_node)
+            else:
         # This is still on the boudary
-        _order  = self.node_list.index(self.current_node)
+                _order = self.edge_list.index(self.current_edge)
         #_order = self.edge_list.index(self.current_edge)
         self.waiting_buddget -= self.waiting_plan[_order]
-        # if self.edge_list == -1:
-        #     print('Error: Truck not yet departure')
-        # else:
-        #     _order = self.edge_list.index(self.current_edge)
-        #     self.waiting_buddget = self.waiting_plan[_order]
+
+    # def is_now_the_just_depart_clk(self,current_clk:datetime,time_gap:int) -> bool:
 
 if __name__ == '__main__':
     test_nodes = [

@@ -9,21 +9,74 @@ class global_handler:
 
     # This is a virtual class that used in this case handling the problem setup
     # It is applied in problem setup
-    def __init__(self,n_of_truck:int,task_set:dict) -> None:
-        self.amount             = n_of_truck
+    def __init__(self) -> None:
+        self.amount             = 0
         self.carrier_index_list = []
         if self.amount < 5000:
             self.generate_virtual_random_truck_index()
         
-        self.truck_2_carrier = {}
+        self.truck_2_carrier    = {}
 
-        self.truck_result = {}
-        self.on_edge_result = {}
+        self.truck_result       = {}
+        self.on_edge_result     = {}
 
         self.t_cost     = 25/3600  # euro/seconds
         self.t_travel   = 56/3600  # euro/seconds
         self.xi         = 0.1 
     
+    def load_data(self,debug_data_select:bool) -> list:
+        if not debug_data_select:
+            f = open('data\OD_hubs_new_1000Trucks','r')
+            a = f.read()
+            task_dict = eval(a) # hubs between the origin and destination
+            f.close()
+
+            f=open('data\OD_hubs_travel_1000Trucks','r')
+            a=f.read()
+            travel_time_dict=eval(a) # travel times of different trucks on road segments
+            f.close()
+
+            f=open('data\\vehicle_arr_dep_hubs0_1000Trucks','r') # the initial departure times from the origins 
+            a=f.read()
+            vehicle_arr_dep_test=eval(a)
+            f.close()
+            # ---
+            f=open('data\\travel_dd_1000Trucks','r')
+            a=f.read()
+            travel_dd_test=eval(a) # a dict, which includes the allowed total waiting time (seconds) of each truck in the whole trip
+            f.close()
+        else:
+            # This is a small test set, to verfiy the function of this simulation
+            task_dict               = {1: [(18.02546160254861, 59.38157382906624), (16.50658561538482, 58.28150384602444), (16.48374131130608, 57.56893497161655), (16.3883782476514, 56.9467696413148), (16.32098233050319, 56.6727356017633)],
+                                       577: [(11.82842433708403, 58.35084770729797), (12.0100484809166, 57.69305990943261)],
+                                       317: [(11.82842433708403, 58.35084770729797), (12.0100484809166, 57.69305990943261)],
+                                       405: [(11.82842433708403, 58.35084770729797), (12.0100484809166, 57.69305990943261), (12.9235479241113, 57.71549970054969), (14.15662952188514, 57.75197484564614), (14.07668139189311, 57.15992894233719)],
+                                       177: [(13.10271132053603, 55.38218924904132), (14.09604530011136, 55.4879185585079)],
+                                       947: [(13.10271132053603, 55.38218924904132), (12.7860903072887, 56.01801572566561), (14.77870801731729, 56.89565675229857)],
+                                       342: [(22.06332834731737, 65.62200924609067), (20.96014349272004, 64.75038578544915)],
+                                       544: [(22.06332834731737, 65.62200924609067), (20.96014349272004, 64.75038578544915)]}
+            travel_time_dict        = {1: [[(18.02546160254861, 59.38157382906624), 12703.2895], [(16.50658561538482, 58.28150384602444), 5755.7795], [(16.48374131130608, 57.56893497161655), 4285.0585], [(16.3883782476514, 56.9467696413148), 1894.0153]],
+                                       577: [[(11.82842433708403, 58.35084770729797), 5018.2878]],
+                                       317: [[(11.82842433708403, 58.35084770729797), 5018.2878]],
+                                       405: [[(11.82842433708403, 58.35084770729797), 5018.2878], [(12.0100484809166, 57.69305990943261), 3588.4145], [(12.9235479241113, 57.71549970054969), 5176.933], [(14.15662952188514, 57.75197484564614), 3513.3958]],
+                                       177: [[(13.10271132053603, 55.38218924904132), 5516.1927]],
+                                       947: [[(13.10271132053603, 55.38218924904132), 5035.2804], [(12.7860903072887, 56.01801572566561), 10082.9701]],
+                                       342: [[(22.06332834731737, 65.62200924609067), 8390.1522]],
+                                       544: [[(22.06332834731737, 65.62200924609067), 8390.1522]]}
+            vehicle_arr_dep_test    = { 1: {(18.02546160254861, 59.38157382906624): {'t_a': ['2021-11-20 08:01:40.0000'], 't_d': ['2021-11-20 08:01:40.0000'], 'label': 'I'}, (16.50658561538482, 58.28150384602444): {'t_a': ['2021-11-20 11:33:23.2895'], 't_d': ['2021-11-20 11:33:23.2895'], 'label': 'I'}, (16.48374131130608, 57.56893497161655): {'t_a': ['2021-11-20 13:09:19.0690'], 't_d': ['2021-11-20 13:09:19.0690'], 'label': 'I'}, (16.3883782476514, 56.9467696413148): {'t_a': ['2021-11-20 14:20:44.1275'], 't_d': ['2021-11-20 14:20:44.1275'], 'label': 'I'}, (16.32098233050319, 56.6727356017633): {'t_a': ['2021-11-20 14:52:18.1428'], 't_d': []}},
+                                        577: {(11.82842433708403, 58.35084770729797): {'t_a': ['2021-11-20 08:00:00.0000'], 't_d': ['2021-11-20 08:00:00.0000'], 'label': 'I'}, (12.0100484809166, 57.69305990943261): {'t_a': ['2021-11-20 09:23:38.2878'], 't_d': []}},
+                                        317: {(11.82842433708403, 58.35084770729797): {'t_a': ['2021-11-20 08:01:40.0000'], 't_d': ['2021-11-20 08:01:40.0000'], 'label': 'I'}, (12.0100484809166, 57.69305990943261): {'t_a': ['2021-11-20 09:25:18.2878'], 't_d': []}},
+                                        405: {(11.82842433708403, 58.35084770729797): {'t_a': ['2021-11-20 08:01:40.0000'], 't_d': ['2021-11-20 08:01:40.0000'], 'label': 'I'}, (12.0100484809166, 57.69305990943261): {'t_a': ['2021-11-20 09:25:18.2878'], 't_d': ['2021-11-20 09:25:18.2878'], 'label': 'I'}, (12.9235479241113, 57.71549970054969): {'t_a': ['2021-11-20 10:25:06.7023'], 't_d': ['2021-11-20 10:25:06.7023'], 'label': 'I'}, (14.15662952188514, 57.75197484564614): {'t_a': ['2021-11-20 11:51:23.6353'], 't_d': ['2021-11-20 11:51:23.6353'], 'label': 'I'}, (14.07668139189311, 57.15992894233719): {'t_a': ['2021-11-20 12:49:57.0311'], 't_d': []}},
+                                        177: {(13.10271132053603, 55.38218924904132): {'t_a': ['2021-11-20 08:10:00.0000'], 't_d': ['2021-11-20 08:10:00.0000'], 'label': 'I'}, (14.09604530011136, 55.4879185585079): {'t_a': ['2021-11-20 09:41:56.1927'], 't_d': []}},
+                                        947: {(13.10271132053603, 55.38218924904132): {'t_a': ['2021-11-20 08:10:00.0000'], 't_d': ['2021-11-20 08:10:00.0000'], 'label': 'I'}, (12.7860903072887, 56.01801572566561): {'t_a': ['2021-11-20 09:33:55.2804'], 't_d': ['2021-11-20 09:33:55.2804'], 'label': 'I'}, (14.77870801731729, 56.89565675229857): {'t_a': ['2021-11-20 12:21:58.2505'], 't_d': []}},
+                                        342: {(22.06332834731737, 65.62200924609067): {'t_a': ['2021-11-20 08:26:40.0000'], 't_d': ['2021-11-20 08:26:40.0000'], 'label': 'I'}, (20.96014349272004, 64.75038578544915): {'t_a': ['2021-11-20 10:46:30.1522'], 't_d': []}},
+                                        544: {(22.06332834731737, 65.62200924609067): {'t_a': ['2021-11-20 08:23:20.0000'], 't_d': ['2021-11-20 08:23:20.0000'], 'label': 'I'}, (20.96014349272004, 64.75038578544915): {'t_a': ['2021-11-20 10:43:10.1522'], 't_d': []}}
+                                        }
+            travel_dd_test          = {1:2463.8143,577:501.8288,317:501.8288,405:1729.7031,177:551.6193,947:1511.8251,342: 839.0152,544: 839.0152}
+        n_of_truck = len(task_dict)
+        self.amount = n_of_truck
+        return [task_dict,travel_time_dict,vehicle_arr_dep_test,travel_dd_test]
+
     def collect_travel_duration(self,data:dict) -> dict:
         ts_time_duration_dict = {}
         for _key_index in data.keys():
@@ -45,10 +98,11 @@ class global_handler:
         return ts_departure_time
     
     def get_max_simulation_time(self,start_time_list:list,travel_time_dict:dict,waiting_budget:list,step:int) -> datetime:
+        _truck_key = list(travel_time_dict.keys())
         for _truck_index,start_time in enumerate(start_time_list):
-            travel_duration_list = travel_time_dict[_truck_index]
+            travel_duration_list = travel_time_dict[_truck_key[_truck_index]]
             travel_duration_all  = sum(travel_duration_list)
-            t_max = start_time + timedelta(seconds=(travel_duration_all)) + timedelta(seconds=waiting_budget[_truck_index])
+            t_max = start_time + timedelta(seconds=(travel_duration_all)) + timedelta(seconds=waiting_budget[_truck_key[_truck_index]])
             if _truck_index == 0:
                 max_time = t_max
             else:
@@ -129,13 +183,20 @@ class global_handler:
         return base_clk + timedelta(minutes=table_resolution*(row_lower+1))
     
     def register_this_traveledge_cost(self,truck:Truck) -> None:
-        if not truck.current_edge == -1 and truck.current_node == -1:
+        if truck.current_edge == -1 and truck.current_node == -1:
+           pass
+        else: 
             # this truck has not done
+
+            if truck.current_edge == -1:
+                _order = truck.node_list.index(truck.current_node)
+            else:
+                _order = truck.edge_list.index(truck.current_edge)
 
             n_of_partener = len(truck.platooning_partener)
 
-            fuel_cost = truck.travel_duration[truck.node_list.index(truck.current_node)] * (self.t_travel)
-            time_cost = truck.travel_duration[truck.node_list.index(truck.current_node)] * (self.t_cost)
+            fuel_cost = truck.travel_duration[_order] * (self.t_travel)
+            time_cost = truck.travel_duration[_order] * (self.t_cost)
 
             _factor = (1 + (1 - self.xi) * n_of_partener) / ( 1 + n_of_partener)
             cost = fuel_cost * _factor + time_cost
@@ -143,8 +204,6 @@ class global_handler:
             if not truck.truck_index in self.truck_result.keys():
                 _index = truck.truck_index
                 self.truck_result[_index] = []
-            # else:
-            #     print('repeated')
 
             self.truck_result[truck.truck_index].append(cost)
 
@@ -155,7 +214,7 @@ class global_handler:
 
     def register_this_on_edge_timing(self,edge_dict:dict,time:datetime) -> None:
         if len(edge_dict) > 0:
-            self.on_edge_result[time.timestamp] = edge_dict
+            self.on_edge_result[time.timestamp()] = edge_dict
 
     def save_on_edge_result(self) -> None:
         with open("result/on_edge.txt", "w") as fp:

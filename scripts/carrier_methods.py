@@ -24,7 +24,7 @@ class Carrier:
         self.public_prime           = public_prime
         self.carrier_qty_est        = 1
 
-        self.enc_data_table_base = datetime(2000,1,1,0,0,0,0)
+        self.enc_data_table_base = datetime(year=1990,month=1,day=1)
 
         self.neighoring_carrier_index = []
         # self.encrypted_data
@@ -64,7 +64,7 @@ class Carrier:
         return np.zeros((n_of_rows, n_of_cols))
     
     def load_truck_plan_into_table(self,base_line_clk:datetime) -> None:
-        _temp = np.zeros(self.next_period_plan_matrix.shape)
+        _temp = np.zeros(self.ego_plan.shape)
         for _truck in self.truck_list:
             _this_truck_departure_time = _truck.generate_depature_time_list()
             for _relative_node_order,_d_time in enumerate(_this_truck_departure_time):
@@ -87,7 +87,7 @@ class Carrier:
                     _temp[n_of_row,n_of_col] += 1
                 else:
                     break
-        self.next_period_plan_matrix = _temp
+        self.ego_plan = _temp
     
     def select_communication_slot(self,max_slot:int):
         self.current_slot_com = random.randint(1,max_slot)
@@ -102,122 +102,10 @@ class Carrier:
     def split_plan_table_into_two_part(self) -> list:
         # self.public_prime = key_prime
         key_prime = self.public_prime
-        matrix_shape = self.next_period_plan_matrix.shape
+        matrix_shape = self.consensus_matrix.shape
         A = np.random.randint(0, key_prime, size=matrix_shape, dtype=np.int64)
-        B = (self.next_period_plan_matrix - A) % key_prime
+        B = (self.consensus_matrix - A) % key_prime
         return [A,B]
-
-    def row_rolling_plan_table(self,base_line_clk:datetime) -> None:
-        self.next_period_plan_matrix[:-1, :] = self.next_period_plan_matrix[1:, :]
-        self.next_period_plan_matrix[-1, :] = 0
-        concerned_time_slot_left  = base_line_clk + timedelta(self.future_range - self.time_resolution)
-        concerned_time_slot_right = concerned_time_slot_left + timedelta(self.time_resolution)
-        for _truck in self.truck_list:
-            # ask for the latest departure time information again
-            _this_list = _truck.generate_depature_time_list()
-            # check the if any departure at this row
-            for _this_truck_node_index,_d_time in enumerate(_this_list):
-                if _d_time >= concerned_time_slot_left and _d_time < concerned_time_slot_right:
-                    # there is a departure in this node
-                    self.next_period_plan_matrix[_truck.node_list[_this_truck_node_index],-1] += 1
-                    break 
-                if _d_time >= concerned_time_slot_right:
-                    break
-
-    # def update_plan_matrix(self,input1:np.array,input2:np.array) -> None:
-    #     self.next_period_plan_matrix = input1 + input2
-    
-    # def explain_encrypted_matrix(self,input_array:np.array,est_carrier:int) -> np.array:
-    #     return round((input_array * est_carrier) % self.public_prime)
-
-    def sync_future_plan(self,requried_hub:list,arrival_time:datetime,current_clk:datetime,truck_index:int,est_carrier:int) -> list:
-        # return a list of dictionary of each future hub, the possible depature time for platooning
-        # the truck does not care the peers that leave already before
-
-        # But for trucks from other carriers, the information is limited to the consensus period
-        # It also requries the carrier to sync the planning of ther trucks in the list
-
-        # FIXME: Arrival time here means the latest arrival time of this truck
-
-        # first floor this clk to a time resolution
-        seconds_since_epoch = (current_clk - datetime(1970, 1, 1)).total_seconds()
-        rounded_seconds = int(seconds_since_epoch // self.time_resolution) * self.time_resolution
-        current_clk = datetime.utcfromtimestamp(rounded_seconds)
-
-        time_gap = arrival_time - current_clk
-        In_range_aggreated = {}
-        if time_gap <= self.future_range:
-            t_a_row = int(time_gap/self.time_resolution) # counting from 0, this row is the start of interested
-            for _hub in requried_hub:
-                In_range_aggreated_at_hub   = self.next_period_plan_matrix[t_a_row:, _hub]
-
-                In_range_aggreated[_hub]    = self.explain_encrypted_matrix(In_range_aggreated_at_hub,est_carrier)
-
-        # also give the plan in this carrier
-        same_carrier_dict = {}
-        for _hub in requried_hub:
-            same_carrier_list = []
-            for _truck in self.truck_list:
-                if _truck.truck_index == truck_index:
-                # itself does not include
-                    continue
-                if _hub in _truck.node_list:
-                    # this truck has an overlap hub
-                    [t_a,t_d] = _truck.answer_my_plan_at_hub(_hub)
-                    if t_a >= arrival_time:
-                        # potential platooning same-carrier peer
-                        same_carrier_list.append(t_a)
-            same_carrier_dict[_hub] = same_carrier_list
-        
-        return [In_range_aggreated,same_carrier_dict]
-                
-    def answer_known_departure_list_at_this_hub(self,hub_index:int,start_time:datetime,end_time:datetime,table_base_clk:datetime):
-        # (my carrier(including yourself), all I know (including yourself))
-
-        # depending on required time window
-        agg_depart_time = []
-        aggreated_qty   = []
-        ego_depart_time = []
-        ego_qty         = []
-
-        # start time is the current matrix base
-        # so it means everything happens in this timeframe are considered happend together
-
-        if start_time < table_base_clk + timedelta(minutes=self.time_resolution*self.future_range):
-            # something to return from the window
-            hub_array_raw  = self.next_period_plan_matrix[:,hub_index]
-            sum_col        = (hub_array_raw % self.public_prime) * self.carrier_qty_est
-            for row_index,row in enumerate(list(sum_col)):
-                if row == 0:
-                    continue
-                else:
-                    this_time = start_time + timedelta(minutes=row_index * self.time_resolution)
-                    if this_time <= end_time:
-                        agg_depart_time.append(this_time)
-                        aggreated_qty.append(row)
-        
-        for _truck in self.truck_list:
-            if hub_index in _truck.node_list:
-                [t_a,t_d] = _truck.answer_my_plan_at_hub(hub_index)
-                if t_d >= start_time and t_d <= end_time:
-                    _t_round = t_d.replace(second=0,microsecond=0)
-                    # this round time should exist in the list already
-                    if _t_round in ego_depart_time:
-                        ego_qty[ego_depart_time.index(_t_round)] += 1
-                    else:
-                        ego_depart_time.append(_t_round)
-                        ego_qty.append(1)
-        
-        if not len(ego_depart_time) == len(agg_depart_time):
-            # there is such case that part of the ego plan is not in the agg data, that we align the length of data
-            for ego_depart_time_index,ego_depart_time in enumerate(ego_depart_time):
-                if not ego_depart_time in agg_depart_time:
-                    agg_depart_time.append(ego_depart_time)
-                    aggreated_qty.append(ego_qty[ego_depart_time_index]) 
-                    # it must be noted that, the ego time may not be properly order
-
-        return aggreated_qty,ego_qty,ego_depart_time,agg_depart_time
-    
 
     def answer_known_departure_list_for_this_edge(self,edge_index:int,start_time:datetime,end_time:datetime,table_base_clk:datetime):
         # the carrier the asking truck, all the carrier knows about depature parteners
@@ -233,8 +121,8 @@ class Carrier:
         # self.next_period_agg = self.encrypted_data
         if start_time < table_base_clk + timedelta(minutes=self.time_resolution*self.future_range):
             # something make senses in this window
-            edge_array_raw = self.next_period_agg[:,edge_index].copy()
-            sum_col        = (edge_array_raw) % self.public_prime
+            edge_array_raw = self.consensus_matrix[:,edge_index].copy()
+            sum_col        = (edge_array_raw)
 
             for row_index,row in enumerate(list(sum_col)):
                 if row == 0:
@@ -292,39 +180,47 @@ class Carrier:
 
     def select_a_random_neighbor(self) -> int:
         return random.choice(self.neighoring_carrier_index)
+
+    def _is_enc_data_pausible(self) -> bool:
+        raw_data = self.encrypted_data * self.carrier_qty_est
+            # Check if elements are very close to integers
+        is_close_to_integers = np.isclose(a=raw_data, b=np.round(raw_data),atol=0.01)
+        is_plausible = np.all(is_close_to_integers)
+        return is_plausible
     
-    def decode_agg_truck_table(self,cur_table_base:datetime) -> None:
-        # if self.carrier_qty_est > 1:
-        #     self.next_period_agg = np.round(self.encrypted_data * self.carrier_qty_est)
-        # else:
-        #     self.next_period_agg = self.next_period_plan_matrix
-        if cur_table_base  - self.enc_data_table_base > timedelta(minutes=self.future_range):
-            # there is no information in my enc buffer, it may not even exist
-            self.next_period_agg = self.next_period_plan_matrix # use all my information
+    def decode_enc_table(self,cur_table_base:datetime) -> None:
+        if cur_table_base - self.enc_data_table_base > timedelta(minutes=self.future_range):
+            # all information too old, rolling out
+            self.consensus_matrix   = self.ego_plan
         else:
-            _gap        = (cur_table_base  - self.enc_data_table_base).total_seconds()
-            _gap_row    = int(_gap/(self.time_resolution * 60))
-            if not _gap_row == 0:
-                _temp       = np.round(self.encrypted_data * self.carrier_qty_est)
-                _temp_valid = _temp[_gap_row:]
-                _ego_comp   = self.next_period_plan_matrix[-_gap_row:]
-                self.next_period_agg = np.vstack((_temp_valid,_ego_comp))
+            if self._is_enc_data_pausible():
+                decoded_data            = np.round(self.encrypted_data * self.carrier_qty_est)
+                _gap                    = (cur_table_base - self.enc_data_table_base).total_seconds()
+                if _gap != 0:
+                    _gap_row                = int(_gap/(60*self.time_resolution))
+                    _vaild_part             = decoded_data[_gap_row:,:]
+                    _comp_part              = self.ego_plan[-_gap_row:,:]
+
+                    self.consensus_matrix   = np.vstack((_vaild_part,_comp_part)) % self.public_prime
+                else:
+                    self.consensus_matrix   = decoded_data % self.public_prime
             else:
-                self.next_period_agg = np.round(self.encrypted_data * self.carrier_qty_est)
-
-
+                pass # do nothing, kept the valid consensus
 
     def update_encryption_data(self,base_clk:datetime) -> None:
         new_plan = self.return_current_ego_plan_in_matrix(base_clk)
-        diff_mat = new_plan - self.next_period_plan_matrix
+        diff_mat = new_plan - self.ego_plan
         try:
-            self.encrypted_data += diff_mat # changes are loaded in
-            self.next_period_plan_matrix = new_plan
+            self.encrypted_data     += diff_mat         # changes are loaded in for communication
+            # the update data above only stays alive for this communication period (before next table roll)
+
+            self.consensus_matrix   += diff_mat         # changes are loaded for next round of EP
+            self.ego_plan = new_plan
         except:
             pass
 
     def return_current_ego_plan_in_matrix(self,base_clk:datetime) -> np.array:
-        temp = np.zeros(shape=self.next_period_plan_matrix.shape)
+        temp = np.zeros(shape=self.ego_plan.shape)
         base_line_clk = base_clk
         for _truck in self.truck_list:
             _this_truck_departure_time = _truck.generate_depature_time_list()
@@ -335,14 +231,50 @@ class Carrier:
                 if _d_time < base_line_clk + timedelta(minutes=self.future_range) and _d_time >= base_line_clk:
                     # +1 for the corresponding matrix
                     # determine which row it is gonna be
+                    if _d_time == base_line_clk:
+                        continue
                     _gap = _d_time - base_line_clk
-                    n_of_row = int(_gap.total_seconds()/60) - 1
-                    if n_of_row < 0:
-                        n_of_row = 0
+                    # FIXME: 8:01:40 -> row 0 -> incorrect
+                    # but if 8:01:00 -> row 0 -> correct
+                    if _gap.total_seconds()%60 == 0:
+                        # this is a correct minute
+                        n_of_row = int(_gap.total_seconds()/60) - 1
+                        if n_of_row < 0:
+                            n_of_row = 0
+                    else:
+                        n_of_row = int(_gap.total_seconds()/60)
                     # we now need to select the edge
                     n_of_col = _truck.edge_list[_relative_node_order]
                     # n_of_col = _truck.node_list[_relative_node_order]
                     temp[n_of_row,n_of_col] += 1
                 else:
-                    break
+                    continue
         return temp
+    
+    def rolling_consensus_table(self,cur_clk:datetime) -> None:
+        # first update ego plan
+        ego_plan_new    = self.return_current_ego_plan_in_matrix(cur_clk)
+        # comparing to the last timing, the waiting plan of trucks and the base timing will be changed
+        # Not sure this has been done at other steps. But this make sure consensus reached before
+        # which may come from a disconnected peer, will remain valid
+        delta_ego_plan  = ego_plan_new[0:-1,:] - self.ego_plan[1:,:]
+        # The new consensus is based on the previous plan
+        new_consensus_part      = self.consensus_matrix[1:,:] + delta_ego_plan
+        self.consensus_matrix   = np.vstack((new_consensus_part,ego_plan_new[-1,:]))
+        self.ego_plan           = ego_plan_new
+    
+    def rolliing_encryption_table(self) -> None:
+        enc_valid = self.encrypted_data[1:,:]
+        new_data  = np.vstack((enc_valid,self.ego_plan[-1:,:]))
+        self.encrypted_data = new_data
+
+    def answer_latest_raw_depart_time(self,t_round:datetime,edge_index:int):
+        depart_time_raw = []
+        for _truck in self.truck_list:
+            if edge_index in _truck.edge_list:
+                _this_truck_departure_time = _truck.generate_depature_time_list()
+                for _d_time in _this_truck_departure_time:
+                    if _d_time < t_round and _d_time >= t_round - timedelta(minutes=self.time_resolution):
+                        # this is the raw time
+                        depart_time_raw.append(_d_time)
+        return max(depart_time_raw)
