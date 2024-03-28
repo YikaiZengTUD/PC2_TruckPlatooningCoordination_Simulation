@@ -274,7 +274,7 @@ class Carrier:
             if edge_index in _truck.edge_list:
                 _this_truck_departure_time = _truck.generate_depature_time_list()
                 for _d_time in _this_truck_departure_time:
-                    if _d_time < t_round and _d_time >= t_round - timedelta(minutes=self.time_resolution):
+                    if _d_time <= t_round and _d_time > t_round - timedelta(minutes=self.time_resolution):
                         # this is the raw time
                         depart_time_raw.append(_d_time)
         return max(depart_time_raw)
