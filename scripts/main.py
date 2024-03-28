@@ -36,7 +36,7 @@ Data Input
 # load from dict style files
 # contents are quite reduant since these are intermedia results from previous studies
 Simu_Setter     = global_handler()
-[task_dict,travel_time_dict,vehicle_arr_dep_test,travel_dd_test] = Simu_Setter.load_data(debug_data_select=True)
+[task_dict,travel_time_dict,vehicle_arr_dep_test,travel_dd_test] = Simu_Setter.load_data(debug_data_select=False)
 n_of_truck      = Simu_Setter.amount
 # Extract Map information from the OD pairs 
 M = GeoMap(task_dict)
