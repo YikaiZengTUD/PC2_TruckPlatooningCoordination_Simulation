@@ -1,6 +1,12 @@
-# Multi-fleet-Platoon-Coordination
-Code for multi-fleet platoon coordination of 1000 trucks using DP.
-This is a sample code for the algorithm introduced in the paper 
-"Large-Scale Multi-Fleet Platoon Coordination: A Dynamic Programming Approach".
-Copyright: @Ting Bai.
-Please cite the paper if the codes are used for academic publication.
+# Privacy-Preserving Cross-carrier Truck Platooning coordination
+This is simulation source code of a study on coordinating trucks, despite which carrier it belongs to, while preserving privacy. The theory and detailed methologies are given in this paper.
+ - [ ] Offer links when preprint is ready
+
+## Running dependencies
+The simulation is running on the conda environment listed in the /conda folder, it is not yet tested but the one may reproduce this enviroment by
+```
+cd .\conda\
+conda env create -f environment.yml
+```
+after you set this folder as your working directory.
+
