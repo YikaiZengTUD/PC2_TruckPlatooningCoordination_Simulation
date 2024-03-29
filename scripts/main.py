@@ -36,7 +36,7 @@ Data Input
 # load from dict style files
 # contents are quite reduant since these are intermedia results from previous studies
 Simu_Setter     = global_handler()
-[task_dict,travel_time_dict,vehicle_arr_dep_test,travel_dd_test] = Simu_Setter.load_data(debug_data_select=False)
+[task_dict,travel_time_dict,vehicle_arr_dep_test,travel_dd_test] = Simu_Setter.load_data(debug_data_select=True)
 n_of_truck      = Simu_Setter.amount
 # Extract Map information from the OD pairs 
 M = GeoMap(task_dict)
@@ -203,6 +203,7 @@ for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
                 EP.process_carrier_neighbor_list(_carrier.neighoring_carrier_index + [_carrier.carrier_index])
                 # The EP is about to first build a (very likely not connected graph)
         EP.encryption_platform_prepare()
+        Simu_Setter.record_comm_topo(EP.commun_graph,CLK.current_clk)
         # in this process, the platform knows which carrier is okay to provide service
         # Now the encryption platform must find sub groups that is internally connected 
         # and have at least three members
@@ -399,5 +400,9 @@ for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
 
     CLK.clock_step_plus_ms(communication_period) # move to the next time
 
+for _truck in truck_list:
+    Simu_Setter.record_waittime_result(_truck)
+Simu_Setter.save_wait_time_result()
 Simu_Setter.save_fuel_cost_result()
 Simu_Setter.save_on_edge_result()
+Simu_Setter.save_comm_topo_result()

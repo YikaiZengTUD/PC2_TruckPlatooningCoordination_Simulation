@@ -3,6 +3,7 @@ from datetime import datetime,timedelta
 import csv
 import random
 from truck_methods import Truck
+import networkx as nx
 import json
 
 class global_handler:
@@ -18,7 +19,9 @@ class global_handler:
         self.truck_2_carrier    = {}
 
         self.truck_result       = {}
+        self.wait_time_result   = {}
         self.on_edge_result     = {}
+        self.comm_topo          = {}
 
         self.t_cost     = 25/3600  # euro/seconds
         self.t_travel   = 56/3600  # euro/seconds
@@ -220,3 +223,31 @@ class global_handler:
         with open("result/on_edge.txt", "w") as fp:
             json.dump(self.on_edge_result,fp)
         print('Termination: Departure timing recorded')
+
+    def record_waittime_result(self,truck:Truck):
+        wait_time = truck.waiting_plan
+        self.wait_time_result[truck.truck_index] = wait_time
+    
+    def save_wait_time_result(self) -> None:
+        with open("result/wait_time.txt", "w") as fp:
+            json.dump(self.wait_time_result,fp)
+        print('Termination: Wait time recorded')  
+
+    def record_comm_topo(self,input_graph:nx.Graph,time:datetime):
+        self.comm_topo[time.timestamp()] = input_graph
+
+    def save_comm_topo_result(self) -> None:
+        with open('result/graphs.txt', 'w') as file:
+        # Iterate over each graph in the dictionary
+            for key, graph in self.comm_topo.items():
+                # Write a header indicating the start of a new graph
+                file.write(f'Graph: {key}\n')
+                adjlist_str = str(nx.to_numpy_array(graph))
+                # Write the graph data in the adjacency list format
+                file.write(str(list(graph.nodes())))
+                file.write('\n')
+                file.write(adjlist_str)
+            
+                # Write a separator to indicate the end of the graph
+                file.write('\n---\n')
+        print('Termination: Communication network changes recorded')      
