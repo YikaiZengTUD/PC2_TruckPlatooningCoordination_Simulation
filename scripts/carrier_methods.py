@@ -104,7 +104,7 @@ class Carrier:
         key_prime = self.public_prime
         matrix_shape = self.consensus_matrix.shape
         A = np.random.randint(0, key_prime, size=matrix_shape, dtype=np.int64)
-        B = (self.consensus_matrix - A) % key_prime
+        B = (self.ego_plan - A) % key_prime
         return [A,B]
 
     def answer_known_departure_list_for_this_edge(self,edge_index:int,start_time:datetime,end_time:datetime,table_base_clk:datetime):
@@ -185,8 +185,13 @@ class Carrier:
         raw_data = self.encrypted_data * self.carrier_qty_est
             # Check if elements are very close to integers
         is_close_to_integers = np.isclose(a=raw_data, b=np.round(raw_data),atol=0.01)
-        is_plausible = np.all(is_close_to_integers)
-        return is_plausible
+        is_plausible_integer = np.all(is_close_to_integers)
+
+        dec_trail = raw_data % self.public_prime
+
+        is_plausible_size   = not np.any(dec_trail > 10)
+
+        return is_plausible_integer and is_plausible_size
     
     def decode_enc_table(self,cur_table_base:datetime) -> None:
         if cur_table_base - self.enc_data_table_base > timedelta(minutes=self.future_range):

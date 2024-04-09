@@ -13,16 +13,17 @@ class Encrpytion_Platfrom:
 
     def init_communication_graph(self) -> None:
         self.commun_graph = nx.Graph() # this is the all-in graph for all carrier comminication
-    
-    def process_carrier_neighbor_list(self,_input_list:list) -> None:
+        self.qualified_sub_graphs = []
+        self.quali_carrier_list   = []
+        
+    def process_carrier_neighbor_list(self,_input_list:list,_this_node:int) -> None:
+        if not _this_node in self.commun_graph.nodes:
+            self.commun_graph.add_node(_this_node)
         for _index in _input_list:
             if not _index in self.commun_graph.nodes:
                 self.commun_graph.add_node(_index)
         for _index in _input_list:
-            for _another_index in _input_list:
-                if _index == _another_index:
-                    continue
-                self.commun_graph.add_edge(_index,_another_index)
+            self.commun_graph.add_edge(_index,_this_node)
 
     def find_qualified_sub_grps(self) -> list:
         subgraphs = []

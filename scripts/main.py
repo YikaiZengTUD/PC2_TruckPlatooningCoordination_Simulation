@@ -200,7 +200,7 @@ for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
         EP.init_communication_graph()
         for _carrier in carrier_list:
             if len(_carrier.neighoring_carrier_index) > 0:
-                EP.process_carrier_neighbor_list(_carrier.neighoring_carrier_index + [_carrier.carrier_index])
+                EP.process_carrier_neighbor_list(_carrier.neighoring_carrier_index ,_carrier.carrier_index)
                 # The EP is about to first build a (very likely not connected graph)
         EP.encryption_platform_prepare()
         Simu_Setter.record_comm_topo(EP.commun_graph,CLK.current_clk)
@@ -220,6 +220,7 @@ for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
                 _carrier.rolling_consensus_table(cur_table_base)
 
             if EP.answer_if_qualified(_carrier.carrier_index) and _carrier.enc_service_flag:
+                _carrier.get_current_carrier_number(EP.answer_subgraph_number(_carrier.carrier_index))
                 # the carrier is qualified
                 [A,_carrier.secret_part_kept] = _carrier.split_plan_table_into_two_part()
                 # carrier -> EP: send secretive parts to the platform
@@ -258,7 +259,7 @@ for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
         _carrier.encrypted_data     = _avg_data
         _neighbor.encrypted_data    = _avg_data
         carrier_list[Simu_Setter.carrier_index_list.index(_selected_neighbor_index)] = _neighbor
-        _carrier.get_current_carrier_number(EP.answer_subgraph_number(_carrier.carrier_index))
+        # _carrier.get_current_carrier_number(EP.answer_subgraph_number(_carrier.carrier_index))
     
     actual_on_edge_trucks_this_clk = {} # this variable records the depart data of this timing
     # this is used to register actually on edge trucks that we update (platoonig_partener) of every truck
@@ -274,7 +275,6 @@ for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
             if is_a_arriving_clk:
             # This is the moment that is 60s towards before the physical hub
             # The optimization process for the hub is triggered
-                
                 if _truck.node_list.index(_truck.current_node) == 0:
                     _bias = 55
                 else:

@@ -1,29 +1,28 @@
-
 import json
-import csv
-from datetime import datetime
+def find_keys_with_non_zero(file_path):
+    """
+    Reads a JSON-formatted file and finds keys that contain non-zero elements.
 
-with open("result/on_edge.txt", "r") as fp:
-    depart_time_dict = json.load(fp)
+    Args:
+    - file_path (str): The file path of the JSON file to check.
 
-filename = 'depart_time.csv'
+    Returns:
+    - list: A list of keys that contain non-zero elements.
+    """
+    keys_with_non_zero = []  # Initialize an empty list to hold keys with non-zero elements
+    
+    with open(file_path, 'r') as file:
+        data = json.load(file)  # Load JSON data from file
 
-data = []
-for depart_time in depart_time_dict.keys():
-    dt_object = datetime.fromtimestamp(float(depart_time))
-    formatted_datetime = dt_object.strftime('%Y-%m-%d %H:%M:%S')
-    this_item = depart_time_dict[depart_time]
-    for edge in this_item.keys():
-        for truck in this_item[edge]:
-            this_line = (formatted_datetime,truck,edge)
-            if len(this_item[edge]) > 2:
-                print(this_line)
-            data.append(this_line)
+        # Iterate through the data to find keys with non-zero elements
+        for key, values in data.items():
+            if any(value != 0 for value in values):  # Check if any value is non-zero
+                keys_with_non_zero.append(key)  # Add the key to the list if it has non-zero elements
 
+    return keys_with_non_zero  # Return the list of keys
 
-with open(filename, mode='w', newline='') as file:
-    writer = csv.writer(file)
-    writer.writerow(['timestamp', 'truck index', 'edge_index'])
-    writer.writerows(data)
+file_path = 'result/wait_time.txt'
+# Running the function to find keys with non-zero elements.
+res = find_keys_with_non_zero(file_path)
 
-
+print(res)
