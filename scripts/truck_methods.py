@@ -312,6 +312,12 @@ class Truck:
         qty_ego[_this_truck_index] -= 1
         qty_agg[_this_truck_index] -= 1
 
+        if qty_ego[_this_truck_index] == 0 and qty_agg[_this_truck_index] == 0:
+            qty_ego.pop(_this_truck_index)
+            qty_agg.pop(_this_truck_index)
+            time_list_sorted.remove(t_round)
+            # if happens to be int points, we put it back next step
+
         return [time_list_sorted,qty_agg,qty_ego]
     
     def exclude_this_truck_for_this_edge_plan(self,options_raw:list,edge_index:int) -> list:
