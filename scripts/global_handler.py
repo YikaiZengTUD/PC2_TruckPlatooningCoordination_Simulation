@@ -296,14 +296,16 @@ class global_handler:
         with open('result/graphs.txt', 'w') as file:
         # Iterate over each graph in the dictionary
             for key, graph in self.comm_topo.items():
-                # Write a header indicating the start of a new graph
-                file.write(f'Graph: {key}\n')
+                # Write a header indicating the start of a new graph  
                 adjlist_str = str(nx.to_numpy_array(graph))
+                edge_list   = list(graph.edges)
                 # Write the graph data in the adjacency list format
-                file.write(str(list(graph.nodes())))
-                file.write('\n')
-                file.write(adjlist_str)
+                if len(list(graph.nodes())) > 0:
+                    file.write(f'timestamp: {key}\n')
+                    file.write(str(list(graph.nodes())))
+                    file.write('\n')
+                    file.write(str(edge_list))
             
                 # Write a separator to indicate the end of the graph
-                file.write('\n---\n')
+                    file.write('\n---\n')
         print('Termination: Communication network changes recorded')      

@@ -36,7 +36,7 @@ Data Input
 # load from dict style files
 # contents are quite reduant since these are intermedia results from previous studies
 Simu_Setter     = global_handler()
-[task_dict,travel_time_dict,vehicle_arr_dep_test,travel_dd_test] = Simu_Setter.load_data(debug_data_select=True)
+[task_dict,travel_time_dict,vehicle_arr_dep_test,travel_dd_test] = Simu_Setter.load_data(debug_data_select=False)
 n_of_truck      = Simu_Setter.amount
 # Extract Map information from the OD pairs 
 M = GeoMap(task_dict)
@@ -64,7 +64,21 @@ max_operating_time = Simu_Setter.get_max_simulation_time(
 truck_list = [] # refer each truck with its index as key
 # truck_index_list = []
 truck_index_list = list(travel_duration.keys())
+
+debug_flag = True
+
+if not debug_flag:
+    debug_list = Simu_Setter.carrier_index_list
+else:
+    debug_list = [854,779,855,695,852,846,802,836,692,840,266,763,810,847,393,821,803,616,450,478,639,536,415,663,105]
+
+carrier_list = []
+
+temp_list = []
+
 for _truck_order,truck_index in enumerate(truck_index_list):
+    if not  Simu_Setter.assign_carrier_index(truck_index,False) in debug_list:
+        continue
     T = Truck(
         M.task_dict_node[truck_index],
         truck_index,
@@ -74,15 +88,17 @@ for _truck_order,truck_index in enumerate(truck_index_list):
         truck_waiting_budget[truck_index])
     T.generate_edge_list(M.edge_list)
     truck_list.append(T)
-    # truck_index_list.append(truck_index)
+    temp_list.append(truck_index)
+
+truck_index_list = temp_list
 
 # record this set up
 # convert_setup_to_csv(truck_list)
 
-print('Initialization: Truck Instantiation finished, Truck Amount:',n_of_truck)
+print('Initialization: Truck Instantiation finished, Truck Amount:',len(truck_list))
 
-carrier_list = []
-for carrier_index in Simu_Setter.carrier_index_list:
+
+for carrier_index in debug_list:
     C = Carrier(carrier_index,0,public_key) # type is not applied for now
     for _truck in truck_list:
         if _truck.carrier_index == carrier_index:
@@ -181,8 +197,8 @@ for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
             for _another_truck in this_node_trucks_list:
                 if not _truck.carrier_index == _another_truck.carrier_index:
                     # we may add this to each other
-                    _index_1 = Simu_Setter.carrier_index_list.index(_truck.carrier_index)
-                    _index_2 = Simu_Setter.carrier_index_list.index(_another_truck.carrier_index)
+                    _index_1 = debug_list.index(_truck.carrier_index)
+                    _index_2 = debug_list.index(_another_truck.carrier_index)
 
                     if not _another_truck.carrier_index in carrier_list[_index_1].neighoring_carrier_index:
                         carrier_list[_index_1].neighoring_carrier_index.append(_another_truck.carrier_index)
@@ -254,11 +270,11 @@ for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
         if not EP.check_if_enc_communiation_between_two_carriers(_carrier.carrier_index,_selected_neighbor_index):
             continue # fail to find a qualified at this trial, may not have one at all, thus abort, no retry
 
-        _neighbor = carrier_list[Simu_Setter.carrier_index_list.index(_selected_neighbor_index)]
+        _neighbor = carrier_list[debug_list.index(_selected_neighbor_index)]
         _avg_data = (_carrier.encrypted_data + _neighbor.encrypted_data)/2
         _carrier.encrypted_data     = _avg_data
         _neighbor.encrypted_data    = _avg_data
-        carrier_list[Simu_Setter.carrier_index_list.index(_selected_neighbor_index)] = _neighbor
+        carrier_list[debug_list.index(_selected_neighbor_index)] = _neighbor
         # _carrier.get_current_carrier_number(EP.answer_subgraph_number(_carrier.carrier_index))
     
     actual_on_edge_trucks_this_clk = {} # this variable records the depart data of this timing
@@ -378,10 +394,10 @@ for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
         if len(actual_on_edge_trucks_this_clk[_edge_index]) >= 2:
             for _truck_index in actual_on_edge_trucks_this_clk[_edge_index]:
                 
-                _truck_order = truck_index_list.index(_truck_index) # FIXME: Should be a method from Global Handler
+                _truck_order        = truck_index_list.index(_truck_index) # FIXME: Should be a method from Global Handler
 
                 _carrier_index      = truck_list[_truck_order].carrier_index
-                _carrier_order      = Simu_Setter.carrier_index_list.index(_carrier_index)
+                _carrier_order      = debug_list.index(_carrier_index)
                 _in_truck_order     = carrier_list[_carrier_order].truck_index_list.index(_truck_index)
                 _list_to_add        = actual_on_edge_trucks_this_clk[_edge_index].copy()
                 _list_to_add.pop(_list_to_add.index(_truck_index))
