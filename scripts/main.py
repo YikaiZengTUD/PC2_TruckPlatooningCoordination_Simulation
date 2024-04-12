@@ -70,7 +70,7 @@ debug_flag = True
 if not debug_flag:
     debug_list = Simu_Setter.carrier_index_list
 else:
-    debug_list = [854,779,855,695,852,846,802,836,692,840,266,763,810,847,393,821,803,616,450,478,639,536,415,663,105]
+    debug_list = [854,779,855,695,852,846,802,836,692,840,266,763,810,847,393,821,803,616,450,478,639,536,415,663,105,737,850,829,841]
 
 carrier_list = []
 
@@ -291,6 +291,8 @@ for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
             if is_a_arriving_clk:
             # This is the moment that is 60s towards before the physical hub
             # The optimization process for the hub is triggered
+                # if _truck.truck_index == 567:
+                #     print('\n pause for truck 567 decision moment')
                 if _truck.node_list.index(_truck.current_node) == 0:
                     _bias = 55
                 else:
