@@ -364,7 +364,7 @@ class Truck:
             if _n_order == 0:
                 _this_depart_time = self.start_time + timedelta(seconds=self.waiting_plan[0]) + timedelta(seconds=60)
             else:
-                _this_depart_time += timedelta(seconds=self.travel_duration[_n_order-1] + self.waiting_plan[_n_order-1])
+                _this_depart_time += timedelta(seconds=self.travel_duration[_n_order-1] + self.waiting_plan[_n_order])
             if current_clk >= _this_depart_time and current_clk < _this_depart_time + timedelta(microseconds=time_gap*1000):
                if _n_order == len(self.node_list) - 1:
                 return (False,-1)
@@ -386,6 +386,13 @@ class Truck:
         self.waiting_buddget -= self.waiting_plan[_order]
 
     # def is_now_the_just_depart_clk(self,current_clk:datetime,time_gap:int) -> bool:
+
+    def answer_precise_earliest_time(self,edge_index):
+        _depart_list = self.generate_depature_time_list()
+        _order = self.edge_list.index(edge_index)
+        _this_depart_time = _depart_list[_order]
+        _this_arrival_time = _this_depart_time - timedelta(seconds=self.waiting_plan[_order])
+        return _this_arrival_time
 
 if __name__ == '__main__':
     test_nodes = [

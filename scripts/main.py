@@ -71,7 +71,7 @@ if not debug_flag:
     debug_list = Simu_Setter.carrier_index_list
 else:
     debug_list = [854,779,855,695,852,846,802,836,692,840,266,763,810,847,393,821,803,616,450,478,639,536,415,663,105,737,850,829,841]
-
+    # debug_list = [829]
 carrier_list = []
 
 temp_list = []
@@ -224,6 +224,9 @@ for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
         # Now the encryption platform must find sub groups that is internally connected 
         # and have at least three members
 
+        # if CLK.current_clk == datetime(year=2021,month=11,day=20,hour=10,minute=55):
+        #     print('\npause')
+
         for _carrier in carrier_list:
             _carrier.enc_service_flag = True
             # call this service every rolling-in all new data timing
@@ -291,24 +294,19 @@ for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
             if is_a_arriving_clk:
             # This is the moment that is 60s towards before the physical hub
             # The optimization process for the hub is triggered
-                # if _truck.truck_index == 567:
-                #     print('\n pause for truck 567 decision moment')
-                if _truck.node_list.index(_truck.current_node) == 0:
-                    _bias = 55
-                else:
-                    _bias = 60
-
+                t_earliest = _truck.answer_precise_earliest_time(_truck.generate_future_edges()[0])
                 _truck.platooning_partener = []  # when at hub, the platoonig ends virtually
                 _truck.dp_graph = nx.DiGraph()      
                 _truck.dp_graph.add_node(
                     0,
                     left_time=CLK.current_clk,
-                    right_time=CLK.current_clk + timedelta(seconds=_bias),
+                    right_time=t_earliest,
                     hub=-1,edge=-1) # A virtual search start point
                 dp_node_id = 1
                 left_hub_options    = [0]
                 right_hub_options   = []
-                t_earliest = CLK.current_clk + timedelta(seconds=_bias)
+                #t_earliest = CLK.current_clk + timedelta(seconds=_bias)
+                
                 # t_next     = Simu_Setter.next_int_row_clk(t_earliest,cur_table_base,planning_resolution)
                 for _edge in _truck.generate_future_edges():
                     _hub = _truck.node_list[_truck.edge_list.index(_edge)]
@@ -340,6 +338,9 @@ for time_ms in tqdm(range(0, int(total_length_ms), communication_period)):
                         if _qty == ego_qty[_qty_index]:
                             # this options will be fully ego
                             t_latest = _carrier.answer_latest_raw_depart_time(depart_time_list[_qty_index],_edge)
+                            # if t_latest in depart_time_list:
+                            #     # already in the slot, do nothing 
+                            #     continue
                             if t_latest != depart_time_list[_qty_index]:
                                 # this should replace the depart_time
                                 depart_time_list[_qty_index] = t_latest
