@@ -55,6 +55,10 @@ class Carrier:
                     break
                 if t_d > table_end_time:
                     break # This depart time is out of the consensus `range at this moment
+
+                if t_d <= table_base:
+                    # this is past edge, not involved here, therefore pass
+                    continue
                 
                 _gap        = t_d - table_base
                 _gap_sec    = _gap.total_seconds()
@@ -70,7 +74,8 @@ class Carrier:
                     n_of_row = _gap_row
             
                 _edge = _truck.edge_list[_order]
-
+                if n_of_row < 0:
+                    raise ValueError('Invalid row')
                 plan_table[n_of_row,_edge] += 1
 
         return plan_table
