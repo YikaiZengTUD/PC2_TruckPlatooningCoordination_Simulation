@@ -155,7 +155,8 @@ for time_ms in tqdm(range(0, int(total_length_ms), step_length_ms)):
     # every consensus_table_resolution_second, a carrier must update is planning table
     if time_ms % (consensus_table_resolution_second * 1000) == 0:
         if not time_ms == 0:
-            depart_info[CLK.cur_plan_base] = depart_info_this_row
+            if len(depart_info_this_row) > 0:
+                depart_info[CLK.cur_plan_base] = depart_info_this_row
             depart_info_this_row = {}
             CLK.cur_plan_base = CLK.current_clk - timedelta(seconds=consensus_table_resolution_second)
             # this is every time the table has to row
