@@ -164,7 +164,7 @@ class Truck:
     def is_departing_moment(self, now_time: datetime, time_step: int) -> bool:
         t_d_list = self.generate_depart_time_list()
         for index, t_d in enumerate(t_d_list):
-            if t_d <= now_time <= t_d + timedelta(seconds=time_step):
+            if t_d <= now_time < t_d + timedelta(seconds=time_step):
                 return True, self.edge_list[index]
         return False, None
     
