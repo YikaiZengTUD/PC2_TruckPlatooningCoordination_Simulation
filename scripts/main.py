@@ -12,8 +12,8 @@ from thridparty.encryptor import Encryptor
 import json
 ''' Parameter Settings'''
 
-step_length_ms          = 200  # for simulation steps
-reset_period_ms         = 1000 # 
+step_length_ms          = 500  # for simulation steps
+reset_period_ms         = 2000 # 
 
 consensus_table_resolution_second = 10
 consensus_table_range_second      = 3600
@@ -157,6 +157,7 @@ for time_ms in tqdm(range(0, int(total_length_ms), step_length_ms)):
         if not time_ms == 0:
             if len(depart_info_this_row) > 0:
                 depart_info[CLK.cur_plan_base] = depart_info_this_row
+                # it refers to the vehcile departs with in this (10s, depending on the settings)
             depart_info_this_row = {}
             CLK.cur_plan_base = CLK.current_clk - timedelta(seconds=consensus_table_resolution_second)
             # this is every time the table has to row

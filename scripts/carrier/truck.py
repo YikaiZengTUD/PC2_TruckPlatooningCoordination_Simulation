@@ -158,6 +158,7 @@ class Truck:
                 if index == len(t_a_list) - 1:
                     self.is_finish = True
                     self.position = (0, 0)
+                    return False # arrive at final destination is not counted here
                 return True
         return False
     
@@ -189,7 +190,10 @@ class Truck:
             raise ValueError("The truck is not currently at any hub.")
         
         current_edge_order = current_hub_index
-
+        if current_edge_order == len(self.edge_list) - 1:
+            # this is the last edge
+            return [(now_time,now_time)]
+        
         required_edge_order = self.edge_list.index(geo_edge_index)
 
         if required_edge_order < current_edge_order:
@@ -197,8 +201,8 @@ class Truck:
             raise ValueError("The truck has already pass this hub.")
     
          # Calculate the earliest possible arrival time at the hub where the edge is
-        
-        earliest_possible_arrival = now_time
+        dep_time_list = self.generate_depart_time_list()
+        earliest_possible_arrival = dep_time_list[current_edge_order]
         for i in range(current_hub_index, required_edge_order + 1):
              if i > current_hub_index:  # Skip adding travel time for the current hub
                 earliest_possible_arrival += timedelta(seconds=self.travel_time[i - 1] + self.wait_plan[i])
