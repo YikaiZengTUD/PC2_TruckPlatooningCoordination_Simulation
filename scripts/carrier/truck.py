@@ -166,7 +166,10 @@ class Truck:
         t_d_list = self.generate_depart_time_list()
         for index, t_d in enumerate(t_d_list):
             if t_d <= now_time < t_d + timedelta(seconds=time_step):
-                return True, self.edge_list[index]
+                if index <= len(self.edge_list)-1:
+                    return True, self.edge_list[index]
+                else:
+                    return False, None
         return False, None
     
     def current_hub_order_at_time(self, now_time: datetime,step_ms:int) -> int:
@@ -190,9 +193,6 @@ class Truck:
             raise ValueError("The truck is not currently at any hub.")
         
         current_edge_order = current_hub_index
-        if current_edge_order == len(self.edge_list) - 1:
-            # this is the last edge
-            return [(now_time,now_time)]
         
         required_edge_order = self.edge_list.index(geo_edge_index)
 
