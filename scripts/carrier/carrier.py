@@ -1,5 +1,4 @@
 from carrier.truck import Truck
-
 import numpy as np
 from datetime import datetime,timedelta
 import networkx as nx
@@ -256,7 +255,8 @@ class Carrier:
         dep_time_grid = self._round_continuous_time_in_grid(row_resolution_sec,dep_time) 
         
         if not dep_time_grid in time_options:
-            raise ValueError("Missing this truck time in consensus table")
+            time_options.append(dep_time_grid)
+            depart_qty.append(1)
 
         index_to_adjust = time_options.index(dep_time_grid)
     
