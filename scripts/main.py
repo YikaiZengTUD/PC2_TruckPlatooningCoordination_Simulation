@@ -255,3 +255,16 @@ def serialize_depart_info(depart_info):
 # Save departure information to a JSON file
 with open('result/depart_info.json', 'w') as json_file:
     json.dump(serialize_depart_info(depart_info), json_file, indent=4)
+
+def save_wait_plans(carrier_list, file_path):
+    wait_plans = {}
+    for carrier in carrier_list:
+        for truck in carrier.truck_list:
+            wait_plans[truck.truck_index] = truck.wait_plan
+
+    with open(file_path, 'w') as json_file:
+        json.dump(wait_plans, json_file, indent=4)
+
+    print(f"Wait plans saved to {file_path}")
+
+save_wait_plans(carrier_list,'result/wait_plan.json')
