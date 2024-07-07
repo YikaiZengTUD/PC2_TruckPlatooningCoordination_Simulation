@@ -16,26 +16,17 @@ class Carrier:
 
         self.consensus_range_sec        = consensus_range
         self.consensus_resolution_sec   = int(consensus_range/consensus_table.shape[0])
-        
-        self.neighbor_carrier = []
 
         self.average_intermedia = np.zeros(self.consensus_table.shape)
-        self.connected_peer_qty = 1
 
-        
+        self.row_part1 = None
+        self.row_part2 = None
 
-    def _clear_neighbor_info(self):
-        self.neighbor_carrier = []
+        self.latest_row = None
+        self.in_commun  = False
+        self.com_slot   = None
 
-    def get_neighbors(self,com_network:nx.Graph):
-        self._clear_neighbor_info()
-
-        # Check if the current carrier index exists in the network
-        if self.carrier_index in list(com_network.nodes):
-            # Fetch all neighbors (connected nodes)
-            
-            self.neighbor_carrier = list(com_network[self.carrier_index])
-
+        self.carrier_qty = 1
 
     def involve_a_truck(self,truck:Truck) -> None:
         # accept a truck into this fleet
@@ -80,8 +71,42 @@ class Carrier:
         return plan_table
     
     def update_ego_table(self,table_base:datetime) -> None:
-
         self.ego_table = self.load_plan_into_ego_matrix(table_base)
+
+    def process_update_row(self,public_key:int) -> None:
+        self.row_part1,self.row_part2 = self._divide_last_row_into_two_parts(public_key=public_key)
+
+    def update_average_intermedia(self) -> None:
+        # first stack self.average_intermedia and self.latest_row, and then remove the first row of the stacked array
+         # Stack self.average_intermedia and self.latest_row
+        if self.average_intermedia.size == 0:
+            self.average_intermedia = self.latest_row.reshape(1, -1)
+        else:
+            self.average_intermedia = np.vstack((self.average_intermedia, self.latest_row))
+        
+        # Now remove the first row of the stacked array
+        if self.average_intermedia.shape[0] > 1:  # Check if there are at least two rows to remove one
+            self.average_intermedia = self.average_intermedia[1:]  # Removes the first row
+    
+    def select_a_com_slot(self,options:int):
+        self.com_slot = random.randint(1,options)
+
+
+    def _extract_last_row_ego_table(self) -> np.array:
+        # Extract and return the last row of the ego table
+        if self.ego_table.size == 0:
+            return np.array([])  # Return an empty array if the table is empty
+        return self.ego_table[-1]  # Return the last row
+    
+    def _divide_last_row_into_two_parts(self,public_key:int) -> list:
+        last_row = self._extract_last_row_ego_table()
+        if last_row.size == 0:
+            return [np.array([]), np.array([])]  # Return two empty arrays if there's no last row
+    
+        part1 = np.random.randint(0, public_key, size=last_row.shape)
+        part2 = (last_row - part1) % public_key  # Ensure part2 values also respect the modulus condition
+
+        return [part1, part2]
 
 
     def divide_secrets_into_two_parts(self, public_key: int) -> None:
@@ -109,26 +134,39 @@ class Carrier:
             raise ValueError('insufficient amount of connected carriers')
         self.connected_peer_qty = peer_qty
 
-    def select_random_neighbor(self):
-        if not self.neighbor_carrier:
-            raise ValueError("neighbor_carrier list is empty")
-        return random.choice(self.neighbor_carrier)
-    
-    def check_validate_intermedia(self,public_key:int):
-        value = self.average_intermedia * self.connected_peer_qty
 
-        # Ensure value is a NumPy array
-        if not isinstance(value, np.ndarray):
-            raise ValueError("The computed value must be a NumPy array.")
-        
-        if np.all(np.abs(value - np.round(value)) < 0.15):
-            decode_raw = np.round(value) % public_key
-            # Check if 80% or more elements in decode_raw are zero
-            zero_count = np.sum(decode_raw == 0)
-            total_count = decode_raw.size
-            zero_percentage = zero_count / total_count
-            if zero_percentage >= 0.8:
-                self.consensus_table = decode_raw
+    def check_validate_intermedia(self, public_key: int):
+        # Validate public_key
+
+        # # Compute value and ensure it's a NumPy array
+        # value = self.average_intermedia * self.carrier_qty
+
+        # decode_raw = np.round(value) % public_key
+
+        # # Check if a significant majority of elements are zero
+        # zero_count = np.sum(decode_raw == 0)
+        # total_count = decode_raw.size
+
+        # zero_percentage = zero_count / total_count
+
+        # # Check that all elements are less than 15
+        # all_elements_valid = np.all(decode_raw < 15)
+
+        # if zero_percentage >= 0.8 and all_elements_valid:
+        #     self.consensus_table = decode_raw
+
+        decode_raw = np.round(self.average_intermedia * self.carrier_qty) % public_key
+
+                # Use np.logical_and to combine conditions in a single operation for efficiency
+        conditions_met = np.logical_and(
+            (np.sum(decode_raw == 0) / decode_raw.size >= 0.8),  # Majority of elements are zero
+            np.all(decode_raw < 15)  # All elements are less than 15
+        )
+
+        if conditions_met:
+            self.consensus_table = decode_raw
+            return True
+        return False
     
     def update_consensus_table(self):
         # this function is called everytime the ego plan table is updated when the table needs rolling
@@ -140,17 +178,33 @@ class Carrier:
             print("Ego table is empty or not initialized.")
             return
         
-        ego_table_slice         = self.ego_table[:-1, :]
-        ego_table_record_slice  = self.ego_table_record[1:, :]
-        delta = ego_table_slice - ego_table_record_slice
-        self.ego_table_record = self.ego_table
+        # ego_table_slice         = self.ego_table[:-1, :]
+        # ego_table_record_slice  = self.ego_table_record[1:, :]
+        # delta = ego_table_slice - ego_table_record_slice
+        # self.ego_table_record = self.ego_table
 
         # Remove the first row of consensus_table
         self.consensus_table = np.delete(self.consensus_table, 0, axis=0)
-        self.consensus_table += delta
+        # self.consensus_table += delta
         # Append the last row of ego_table to consensus_table
         last_row = self.ego_table[-1, :].reshape(1, -1)
         self.consensus_table = np.vstack((self.consensus_table, last_row))
+
+    def select_a_random_carrier(self,option_list:list) -> int:
+        # Make a copy of the list to modify it without affecting the original list
+        modified_list = option_list.copy()
+        
+        # Remove self.carrier_index from the list if it exists
+        if self.carrier_index in modified_list:
+            modified_list.remove(self.carrier_index)
+        
+        # Check if the list is empty after removal
+        if not modified_list:
+            raise ValueError("No carriers available for selection")
+        
+        # Randomly select and return an element from the modified list
+        return random.choice(modified_list)
+
 
     def answer_samecarrier_options(self,edge_index:int,time_window:list,row_resolution_sec:int,asking_truck_index:int):
 
@@ -267,3 +321,15 @@ class Carrier:
             depart_qty[index_to_adjust] -= 1
 
         return time_options, depart_qty
+    
+    def sync_decision_changes(self,table_base:datetime):
+        
+        ego_table = self.load_plan_into_ego_matrix(table_base=table_base)
+        # the ego table is updated 
+
+        delta = ego_table - self.ego_table
+        self.ego_table          = ego_table
+        self.consensus_table    += delta
+        self.average_intermedia += delta
+
+

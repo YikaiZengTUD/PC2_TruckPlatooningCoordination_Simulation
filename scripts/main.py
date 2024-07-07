@@ -10,10 +10,10 @@ from carrier.truck import Truck
 from carrier.carrier import Carrier
 from thridparty.encryptor import Encryptor
 import json
+import time
 ''' Parameter Settings'''
 
-step_length_ms          = 500  # for simulation steps
-reset_period_ms         = 2000 # 
+step_length_ms                    = 500  # period for the carrier to perform communications
 
 consensus_table_resolution_second = 10
 consensus_table_range_second      = 3600
@@ -21,6 +21,8 @@ consensus_table_range_second      = 3600
 row_of_consensus        = int(consensus_table_range_second/consensus_table_resolution_second)
 
 debug_flag              = False
+
+com_slots               = 50 
 
 public_key              = 103
 
@@ -34,7 +36,7 @@ geo_map = GeoMap()
 # Import data from data files
 
 [geo_map.hub_list,travel_path_dict,travel_time_dict,geo_map.edge_list,start_time_dict] = import_data_from(
-    filepath            = 'data',
+    filepath            = 'testdata',
     node_list_file      = 'OD_hubs_new_1000Trucks',
     travel_time_file    = 'OD_hubs_travel_1000Trucks',
     start_time_file     = 'vehicle_arr_dep_hubs0_1000Trucks'
@@ -95,6 +97,7 @@ for _truck in truck_list:
 print('Instantiations -> Carrier amout:',len(carrier_list))
 
 for _carrier in carrier_list:
+    _carrier.carrier_qty        = len(carrier_index_list)
     _carrier.update_ego_table(CLK.cur_plan_base)
     _carrier.ego_table_record   = _carrier.ego_table
     _carrier.consensus_table    = _carrier.ego_table
@@ -127,84 +130,111 @@ depart_info          = {}
 depart_info_this_row = {}
 
 for time_ms in tqdm(range(0, int(total_length_ms), step_length_ms)):
-    # locate all trucks at this moment
-    geo_map.clear_loc_history()
-    for _truck in truck_list:
-        _truck.update_position(CLK.current_clk,geo_map.hub_list,step_length_ms)
-        geo_map.register_this_truck_position(_truck.truck_index,_truck.position)
-
-    # build carrier2carrier communication network
-    Simu_Handle.build_comm_graph_from_v2v_pos(geo_map.cur_truck_loc,truck_2_carrier_dict)
-    # This is will be automatic if in a real world
-
-    EP.clear_cache()
-    # make distributed setup, carrier knows its neigbor
-    # update the neighboring information to the EP
-
-    # Noted: this steps seems unnecessary as we can just pass the graph from Simu_hanle to EP
-    # But to mimic the actually process, we intentionally repeat such process
-
-    for _carrier in carrier_list:
-        _carrier.get_neighbors(Simu_Handle.com_network)
-        ''' EP start '''
-        EP.receive_carrier_reported_neighbor(_carrier.carrier_index,_carrier.neighbor_carrier)
     
-    # The platform now knows which carrier is qualifed for privacy-preserved info exchange
-    EP.find_qualified_connected_components()
+    '''
+    Assumption 1: that all carriers are online all time, as a service user and a contributor
+    Assumption 2: there is a service provider that provide a fully connected network
+    Assumption 3: each communication period, each carrier is able to perform an attempt of communication
+    Assumption 4: the period is divided into serval slots, and a carrier which chose a random slot to communicate, if the targeted carrier happens to be in communication as well, 
+    this attempt is aborted
+    Assumption 5: the amount of carriers are known to all as a common prior knowledge
+    '''
 
-    # every consensus_table_resolution_second, a carrier must update is planning table
-    if time_ms % (consensus_table_resolution_second * 1000) == 0:
-        if not time_ms == 0:
+    # Prepare phase
+
+    # if this is a clock that a new row of the consensus table is to be updated
+
+    # it is not necessary for time_ms = 0 since the plan has just been loaded
+
+    if (time_ms/1000) % consensus_table_resolution_second == 0:
+
+        if time_ms == 0:
+            # this is the starting point, a full scale encrpytion is needed
+            for _carrier in carrier_list:
+                _carrier.divide_secrets_into_two_parts(public_key)
+                EP.record_secret_part(_carrier.secret_part1,_carrier.carrier_index)
+            
+            EP.process_secret_parts()
+
+            for _carrier in carrier_list:
+                _carrier.get_secrets_pieces(EP.return_carrier_parts(carrier_index=_carrier.carrier_index))
+                
+        else:
             if len(depart_info_this_row) > 0:
                 depart_info[CLK.cur_plan_base] = depart_info_this_row
-                # it refers to the vehcile departs with in this (10s, depending on the settings)
             depart_info_this_row = {}
             CLK.cur_plan_base = CLK.current_clk - timedelta(seconds=consensus_table_resolution_second)
-            # this is every time the table has to row
+            # only the latest row requires updating
+            EP.clear_secret_cache()
             for _carrier in carrier_list:
                 _carrier.update_ego_table(CLK.cur_plan_base)
+                # the update is also required for the self.consensus table
                 _carrier.update_consensus_table()
+                _carrier.process_update_row(public_key)
+                EP.record_secret_part(_carrier.row_part1,_carrier.carrier_index)
+            EP.process_secret_parts()
+            for _carrier in carrier_list:
+                _carrier.latest_row = _carrier.row_part2 + EP.return_carrier_parts(_carrier.carrier_index)
+                _carrier.update_average_intermedia()
 
-    # every reset period, the consensus is being restart so a new neighbor can join
-    if time_ms % (reset_period_ms) == 0:
-        # this is when the EP process repeated or started
-        for _carrier in carrier_list:
-            if _carrier.carrier_index in EP.qualified_carrier_list:
-                # divide and upload
-                _carrier.divide_secrets_into_two_parts(public_key)
-                # Ep takes in the secrets, summing up within the subgraph
-                EP.receive_secret_part(_carrier.carrier_index,_carrier.secret_part1)
-        
-        # handle the information exchanges
-        EP.divide_secrets()
-        # inform carriers how about how many are connected
-        EP.prepare_subgraph_participants_qty()
-        for _carrier in carrier_list:
-            if _carrier.carrier_index in EP.qualified_carrier_list:
-                _carrier.get_secrets_pieces(EP.divided_parts[_carrier.carrier_index])
-                _carrier.get_connected_qty(EP.answer_subgraph_node_qty(_carrier.carrier_index))
+            # record depart information
+                
+    # Information exchange phase
 
-    # random select a neighbor for the process
+    # each carrier get a communication slot 
+    # this is to reduce the conflicts in communication
+    comun_schedule_by_carrier = {}
 
     for _carrier in carrier_list:
-        if _carrier.carrier_index in EP.qualified_carrier_list:
-            # only those who have neighbors do this
-            # this equals to in the qualified list but just using local variable for mimicing real world
-            select_neighbor_index = _carrier.select_random_neighbor()
-            if not select_neighbor_index in EP.qualified_carrier_list:
-                continue # must check if it has been processed by EP or not, if not, abandone this attempt
-            _neighbor_obj_index = carrier_index_list.index(select_neighbor_index)
-            _neighbor_carrier   = carrier_list[_neighbor_obj_index]
+        _carrier.select_a_com_slot(com_slots)
+        _carrier.in_commun = False
+    
+        comun_schedule_by_carrier[_carrier.carrier_index] = _carrier.com_slot
+
+    inverse_comun_schedule = {}
+    for carrier_index, com_slot in comun_schedule_by_carrier.items():
+        if com_slot not in inverse_comun_schedule:
+            inverse_comun_schedule[com_slot] = []
+        inverse_comun_schedule[com_slot].append(carrier_index)
+    
+    for com_slot, this_slot_carrier_list in inverse_comun_schedule.items():
+        concerned_carrier_list = []
+        concerned_carrier_list = this_slot_carrier_list.copy()
+
+        for _carrier_index in this_slot_carrier_list:
+            _carrier = carrier_list[carrier_index_list.index(_carrier_index)]
+            _carrier.in_commun  = True
+            _com_target_index   = _carrier.select_a_random_carrier(carrier_index_list)
+            _tar_carrier = carrier_list[carrier_index_list.index(_com_target_index)]
+
+            if _tar_carrier.carrier_index in this_slot_carrier_list:
+                _carrier.in_commun = False
+                continue
+                # this carrier abort this trial because the selected carrier is also in communication 
             
-            # averaging
-            avg_values = (_carrier.average_intermedia + _neighbor_carrier.average_intermedia)/2
-            _carrier.average_intermedia = avg_values
-            _neighbor_carrier.average_intermedia = avg_values
+            if _tar_carrier.in_commun:
+                _carrier.in_commun = False
+                continue
 
-            # check if convergence, the lastest converged information will be used for decison making
-            _carrier.check_validate_intermedia(public_key)
+            _tar_carrier.in_commun = True
 
-    # moment of decisions
+            concerned_carrier_list.append(_tar_carrier.carrier_index)
+
+            avg = (_tar_carrier.average_intermedia + _carrier.average_intermedia)/2
+            _tar_carrier.average_intermedia = avg.copy()
+            _carrier.average_intermedia = avg.copy()
+
+        for _carrier_index in concerned_carrier_list:
+            _carrier = carrier_list[carrier_index_list.index(_carrier_index)]
+            _carrier.in_commun = False
+
+    # a carrier will be making decision with based on self.consensus_table, 
+    # therefore, they would hold a latest reliable table for making decison since the consensus may still remain unreliable
+    for _carrier in carrier_list:
+        _carrier.check_validate_intermedia(public_key)
+    # NOTE: Too slow, make it event trigger (?)
+    
+    # Decision making process
 
     # we need to check if this a timing of arrival a hub - when decsion is made
     for _carrier in carrier_list:
@@ -213,9 +243,8 @@ for time_ms in tqdm(range(0, int(total_length_ms), step_length_ms)):
                 continue # this truck has already arrived
             if _truck.is_arrival_moment(CLK.current_clk,1e-3*step_length_ms):
                 # this is when a truck arrives and needs making decisons
-                # generate the dp graph and search weigt cheapest trips
-                # if _truck.truck_index == 577 or _truck.truck_index == 317:
-                #     print('pause')
+                # generate the dp graph and search weight cheapest trips
+                pass
                 edge_to_decide = _truck.future_edges(CLK.current_clk,step_length_ms)
                 decide_options_on_edge = {}
                 for _edge in edge_to_decide:
@@ -227,16 +256,18 @@ for time_ms in tqdm(range(0, int(total_length_ms), step_length_ms)):
                     # truck actions
                     decide_options_on_edge[_edge] = combined_options
                 # generate dp graph based on these options
-
                 _truck.dp_graph = _truck.generate_dp_graph(decide_options_on_edge,CLK.current_clk,step_length_ms)
                 dp_path         = _truck.find_shortest_path(_truck.dp_graph)
                 if len(dp_path) == 0:
                     raise ValueError('Path Error')
-                _truck.update_waiting_plan(dp_path,edge_to_decide)
-
-    # we need to check if this is also a departure time, for those have waitted mostly,
-
-    # we consider truck departs within the same grid in consensus table, are in platooning
+                change_flag = _truck.update_waiting_plan(dp_path,edge_to_decide)
+                if change_flag:
+                    ego_table = _carrier.load_plan_into_ego_matrix(table_base=CLK.cur_plan_base)
+                    delta = ego_table - _carrier.ego_table
+                    _carrier.ego_table = ego_table
+                    _carrier.consensus_table    += delta
+                    _carrier.average_intermedia += delta
+    
     for _carrier in carrier_list:
         for _truck in _carrier.truck_list:
             if _truck.is_finish:

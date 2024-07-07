@@ -2,6 +2,7 @@ import csv
 import warnings
 from datetime import datetime, timedelta
 import networkx as nx
+import time
 class Truck:
 
     def __init__(self,truck_index:int,task_by_hub_index:list,travel_time_list:list,start_time:datetime) -> None:
@@ -99,57 +100,57 @@ class Truck:
 
         return t_d_list
 
-    def return_cur_position(self,now_time:datetime,map_node_coordinates:dict,step_ms:int) -> tuple:
-        # with time and the plan, we now caculate an estimated coordinates for this truck
-        # Noted: if a truck will 'appear' in the first hub 60s before the first arrival time
-        if now_time < self.start_time - timedelta(seconds=60):
-            return (0,0) # does not exist on map
+    # def return_cur_position(self,now_time:datetime,map_node_coordinates:dict,step_ms:int) -> tuple:
+    #     # with time and the plan, we now caculate an estimated coordinates for this truck
+    #     # Noted: if a truck will 'appear' in the first hub 60s before the first arrival time
+    #     if now_time < self.start_time - timedelta(seconds=60):
+    #         return (0,0) # does not exist on map
         
-        t_a_list = self.generate_arrival_time_list()
-        t_d_list = self.generate_depart_time_list()
+    #     t_a_list = self.generate_arrival_time_list()
+    #     t_d_list = self.generate_depart_time_list()
         
-        # Check if now_time is after the last arrival time
-        if now_time >= t_a_list[-1]:
-            self.is_finish = True
-            return (0, 0)       # Move the truck out by assigning it to (0,0)
+    #     # Check if now_time is after the last arrival time
+    #     if now_time >= t_a_list[-1]:
+    #         self.is_finish = True
+    #         return (0, 0)       # Move the truck out by assigning it to (0,0)
 
-        for i in range(len(t_a_list)):
+    #     for i in range(len(t_a_list)):
             
-            if t_a_list[i] == t_d_list[i]:
-                if now_time >= t_a_list[i] and now_time - timedelta(seconds=1e-3*step_ms) < t_d_list[i]:
-                    return map_node_coordinates[self.hub_list[i]]
+    #         if t_a_list[i] == t_d_list[i]:
+    #             if now_time >= t_a_list[i] and now_time - timedelta(seconds=1e-3*step_ms) < t_d_list[i]:
+    #                 return map_node_coordinates[self.hub_list[i]]
 
-            if t_a_list[i] <= now_time <= t_d_list[i]:
-                # FIXME: 由于时间间隔的愿意，无等待时间的节点会判断出问题
-                # the truck is on this hub
+    #         if t_a_list[i] <= now_time <= t_d_list[i]:
+    #             # FIXME: 由于时间间隔的愿意，无等待时间的节点会判断出问题
+    #             # the truck is on this hub
 
-                return map_node_coordinates[self.hub_list[i]]
+    #             return map_node_coordinates[self.hub_list[i]]
             
-            if now_time < t_a_list[i] and i == 0:
+    #         if now_time < t_a_list[i] and i == 0:
 
-                # speacial handle of the first node
+    #             # speacial handle of the first node
 
-                return map_node_coordinates[self.hub_list[i]]
+    #             return map_node_coordinates[self.hub_list[i]]
             
-            if now_time > t_d_list[i] and now_time <= t_a_list[i+1]:
+    #         if now_time > t_d_list[i] and now_time <= t_a_list[i+1]:
 
-                # on the edge for the next hub
-                this_travel_time    = self.travel_time[i]
+    #             # on the edge for the next hub
+    #             this_travel_time    = self.travel_time[i]
 
-                this_hub_pos        = map_node_coordinates[self.hub_list[i]]
-                next_hub_pos        = map_node_coordinates[self.hub_list[i+1]]
+    #             this_hub_pos        = map_node_coordinates[self.hub_list[i]]
+    #             next_hub_pos        = map_node_coordinates[self.hub_list[i+1]]
 
-                progress_time       = now_time - t_d_list[i]
-                progress            = (progress_time.total_seconds())/this_travel_time
+    #             progress_time       = now_time - t_d_list[i]
+    #             progress            = (progress_time.total_seconds())/this_travel_time
 
-                new_x               = this_hub_pos[0] + (next_hub_pos[0] - this_hub_pos[0]) * progress
-                new_y               = this_hub_pos[1] + (next_hub_pos[1] - this_hub_pos[1]) * progress
+    #             new_x               = this_hub_pos[0] + (next_hub_pos[0] - this_hub_pos[0]) * progress
+    #             new_y               = this_hub_pos[1] + (next_hub_pos[1] - this_hub_pos[1]) * progress
 
-                return (new_x,new_y)
+    #             return (new_x,new_y)
 
-    def update_position(self,now:datetime,map:dict,step_ms:int) -> None:
+    # def update_position(self,now:datetime,map:dict,step_ms:int) -> None:
 
-        self.position = self.return_cur_position(now_time=now,map_node_coordinates=map,step_ms=step_ms)
+    #     self.position = self.return_cur_position(now_time=now,map_node_coordinates=map,step_ms=step_ms)
 
     def is_arrival_moment(self, now_time: datetime, time_step: int) -> bool:
         t_a_list = self.generate_arrival_time_list()
@@ -157,8 +158,9 @@ class Truck:
             if t_a <= now_time < t_a + timedelta(seconds=time_step):
                 if index == len(t_a_list) - 1:
                     self.is_finish = True
-                    self.position = (0, 0)
+                    print('start check done',time.time() - start)
                     return False # arrive at final destination is not counted here
+                print('start check done',time.time() - start)
                 return True
         return False
     
@@ -261,7 +263,16 @@ class Truck:
                         raise ValueError('The aggregated data qty is less than the single carrier qty')
                     ego_qty.append(ego_options_qty[_index])
                     agg_qty.append(agg_options_qty[_index_agg])
-                    
+        
+        for _index,time_slot in enumerate(agg_time_options):
+
+            # every slot here should be in the predict window
+            if not time_slot in combined_time_options:
+                # something purely unknown ego cases
+                combined_time_options.append(time_slot)
+                ego_qty.append(0)
+                agg_qty.append(agg_options_qty[_index])
+
         return combined_time_options,ego_qty,agg_qty
     
     def calculate_earliest_times_to_edges(self, now_time: datetime,step_ms:int) -> dict:
@@ -309,6 +320,9 @@ class Truck:
         dp_edge_start = [0]
         dp_edge_end   = []
         t_earliest_dict = self.calculate_earliest_times_to_edges(now_time,step_ms)
+
+        options_popout = {}
+
         for edge in edges_to_decide:
             # First caculate the earliest possible time to that edge
             # current time is now, time and we have a self.travel_time (list) for travel time on each edge
@@ -319,20 +333,22 @@ class Truck:
             agg_qty             = time_options_tuple[2]
 
             t_earliest          = t_earliest_dict[edge]
+
             if edges_to_decide.index(edge) > 0:
                 t_travel = self.travel_time[self.edge_list.index(edge)-1]
             else:
                 t_travel = 0
             t_cost = self.travel_time[self.edge_list.index(edge)]
-            if not t_earliest in time_options:
-                # this is likely to happen
-
-                dep_last_node = t_earliest - timedelta(seconds=t_travel)
-                graph.add_node(dp_id,time_dep_lastnode=dep_last_node,time_dep=t_earliest,edge_index=edge)
-                dp_edge_end.append(dp_id)
-                dp_id += 1
-                
             
+            # if not t_earliest in time_options:
+            #     # this is likely to happen
+
+            #     dep_last_node = t_earliest - timedelta(seconds=t_travel)
+            #     graph.add_node(dp_id,time_dep_lastnode=dep_last_node,time_dep=t_earliest,edge_index=edge)
+            #     dp_edge_end.append(dp_id)
+            #     dp_id += 1
+                
+            # list_next_node_options = []
             for index,opt in enumerate(time_options):
                 ego_amount = ego_qty[index]
                 agg_amount = agg_qty[index]
@@ -341,6 +357,41 @@ class Truck:
                 graph.add_node(dp_id,time_dep_lastnode=dep_last_node,time_dep=opt,edge_index=edge,ego_veh=ego_amount,agg_veh=agg_amount)
                 dp_edge_end.append(dp_id)
                 dp_id += 1
+
+            # now check those missing but necessary nodes
+            ego_amount = 0
+            agg_amount = 0
+            # it is fully solo, otherwise being listed in the above method
+            for node_index in dp_edge_start:
+                this_nx_node       = graph.nodes[node_index]
+                dep_time_last_node = this_nx_node['time_dep']
+                dep_time_this_node = dep_time_last_node + timedelta(seconds=t_travel)
+                graph.add_node(dp_id,time_dep_lastnode=dep_time_last_node,time_dep=dep_time_this_node,edge_index=edge,ego_veh=ego_amount,agg_veh=agg_amount)
+                dp_edge_end.append(dp_id)
+                dp_id += 1
+                
+            #     if not opt == t_earliest: # this option is auto added in the last step
+            #         time_opt_to_add = opt  + timedelta(seconds=t_cost)
+            #         list_next_node_options.append(time_opt_to_add)
+
+            # if edges_to_decide.index(edge) <= len(edges_to_decide) - 2:
+            #     options_popout[edges_to_decide[edges_to_decide.index(edge)+1]] = list_next_node_options
+
+            # if edges_to_decide.index(edge) >= 1:
+            #     # that we should consider plug in other nodes
+            #     list_last_node_options = options_popout[edge]
+
+            #     for index,opt in enumerate(list_last_node_options):
+            #         if opt in time_options:
+            #             continue # this node has already been added because there is platooning chance
+            #         ego_amount = 1
+            #         agg_amount = 1 # it should be a fully solo, otherwise will be processed in the above steps
+
+            #         dep_last_node = opt - timedelta(seconds=t_travel) # the truck must start from last node no later than this time
+            #         graph.add_node(dp_id,time_dep_lastnode=dep_last_node,time_dep=opt,edge_index=edge,ego_veh=ego_amount,agg_veh=agg_amount)
+            #         dp_edge_end.append(dp_id)
+            #         dp_id += 1                    
+
 
             for dp_node_start in dp_edge_start:
 
@@ -378,16 +429,22 @@ class Truck:
             print("No path found from start to end node.")
             return []
         
-    def update_waiting_plan(self,dp_path:list,edge_list_future:list) -> None:
+    def update_waiting_plan(self,dp_path:list,edge_list_future:list) -> bool:
         dp_graph = self.dp_graph
-
+        wait_plan = self.wait_plan.copy()
         for index,edge in enumerate(edge_list_future):
             node_depart    = dp_path[index]
             node_arrival   = dp_path[index+1]
             # get the wait time attribute in dp graph on the node: node_arrival 
             edge_index_all = self.edge_list.index(edge)
             wait_edge = dp_graph.edges[(node_depart,node_arrival)].get('wait_time',0)
-            self.wait_plan[edge_index_all] = wait_edge
+            wait_plan[edge_index_all] = wait_edge
+        
+        if wait_plan != self.wait_plan:
+            self.wait_plan = wait_plan
+            return True
+        else:
+            return False
 
 if __name__ == "__main__":
     T = Truck(
