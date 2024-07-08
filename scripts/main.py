@@ -10,10 +10,10 @@ from carrier.truck import Truck
 from carrier.carrier import Carrier
 from thridparty.encryptor import Encryptor
 import json
-import time
+
 ''' Parameter Settings'''
 
-step_length_ms                    = 500  # period for the carrier to perform communications
+step_length_ms                    = 1000  # period for the carrier to perform communications
 
 consensus_table_resolution_second = 10
 consensus_table_range_second      = 3600

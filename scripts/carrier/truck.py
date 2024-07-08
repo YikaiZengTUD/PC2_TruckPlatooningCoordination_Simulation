@@ -158,9 +158,7 @@ class Truck:
             if t_a <= now_time < t_a + timedelta(seconds=time_step):
                 if index == len(t_a_list) - 1:
                     self.is_finish = True
-                    print('start check done',time.time() - start)
                     return False # arrive at final destination is not counted here
-                print('start check done',time.time() - start)
                 return True
         return False
     
