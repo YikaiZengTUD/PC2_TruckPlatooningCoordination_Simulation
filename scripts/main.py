@@ -244,7 +244,7 @@ for time_ms in tqdm(range(0, int(total_length_ms), step_length_ms)):
             if _truck.is_arrival_moment(CLK.current_clk,1e-3*step_length_ms):
                 # this is when a truck arrives and needs making decisons
                 # generate the dp graph and search weight cheapest trips
-                pass
+
                 edge_to_decide = _truck.future_edges(CLK.current_clk,step_length_ms)
                 decide_options_on_edge = {}
                 for _edge in edge_to_decide:
@@ -285,6 +285,8 @@ def serialize_depart_info(depart_info):
     return {k.isoformat() if isinstance(k, datetime) else k: v for k, v in depart_info.items()}
 # Save departure information to a JSON file
 with open('result/depart_info.json', 'w') as json_file:
+
+    print("Depart info saved to result/depart_info.json")
     json.dump(serialize_depart_info(depart_info), json_file, indent=4)
 
 def save_wait_plans(carrier_list, file_path):
