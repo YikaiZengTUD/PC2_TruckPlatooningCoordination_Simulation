@@ -22,7 +22,7 @@ row_of_consensus        = int(consensus_table_range_second/consensus_table_resol
 
 debug_flag              = False
 
-com_slots               = 50 
+com_slots               = 100 
 
 public_key              = 103
 
@@ -244,7 +244,8 @@ for time_ms in tqdm(range(0, int(total_length_ms), step_length_ms)):
             if _truck.is_arrival_moment(CLK.current_clk,1e-3*step_length_ms):
                 # this is when a truck arrives and needs making decisons
                 # generate the dp graph and search weight cheapest trips
-
+                # if _truck.truck_index == 847:
+                #     print('pause')
                 edge_to_decide = _truck.future_edges(CLK.current_clk,step_length_ms)
                 decide_options_on_edge = {}
                 for _edge in edge_to_decide:
