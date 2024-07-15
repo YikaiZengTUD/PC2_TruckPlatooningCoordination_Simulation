@@ -136,37 +136,18 @@ class Carrier:
 
 
     def check_validate_intermedia(self, public_key: int):
-        # Validate public_key
+        # Calculate the decode_raw array
+        decode_raw = (self.average_intermedia * self.carrier_qty) % public_key
 
-        # # Compute value and ensure it's a NumPy array
-        # value = self.average_intermedia * self.carrier_qty
+        # Condition to check closeness to integer
+        is_close_to_int = np.abs(decode_raw - np.round(decode_raw)) < 0.05  # Tolerance for closeness
 
-        # decode_raw = np.round(value) % public_key
-
-        # # Check if a significant majority of elements are zero
-        # zero_count = np.sum(decode_raw == 0)
-        # total_count = decode_raw.size
-
-        # zero_percentage = zero_count / total_count
-
-        # # Check that all elements are less than 15
-        # all_elements_valid = np.all(decode_raw < 15)
-
-        # if zero_percentage >= 0.8 and all_elements_valid:
-        #     self.consensus_table = decode_raw
-
-        decode_raw = np.round(self.average_intermedia * self.carrier_qty) % public_key
-
-                # Use np.logical_and to combine conditions in a single operation for efficiency
-        conditions_met = np.logical_and(
-            (np.sum(decode_raw == 0) / decode_raw.size >= 0.8),  # Majority of elements are zero
-            np.all(decode_raw < 15)  # All elements are less than 15
-        )
-
-        if conditions_met:
-            self.consensus_table = decode_raw
-            return True
-        return False
+        # Check if each element is less than 15 and close to an integer
+        is_valid = np.logical_and(decode_raw < 15, is_close_to_int)
+        # Prepare the values to be updated: round only the valid entries
+        values_to_update = np.where(is_valid, np.round(decode_raw), self.consensus_table)
+        # Update consensus_table only where is_valid is True
+        np.copyto(self.consensus_table, values_to_update)
     
     def update_consensus_table(self):
         # this function is called everytime the ego plan table is updated when the table needs rolling
