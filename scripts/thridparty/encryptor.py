@@ -41,10 +41,10 @@ class Encryptor:
         last_part = (total_secret - sum_parts) % self.public_key
         self.secret_parts_returned[last_key] = last_part
 
-        # Ensure the final part aligns with the total secret's scale
-        actual_sum = sum(self.secret_parts_returned.values())
-        difference = total_secret - actual_sum
-        self.secret_parts_returned[last_key] += difference
+        # # Ensure the final part aligns with the total secret's scale
+        # actual_sum = sum(self.secret_parts_returned.values())
+        # difference = total_secret - actual_sum
+        # self.secret_parts_returned[last_key] += difference
 
     def return_carrier_parts(self,carrier_index:int) -> np.array:
         return self.secret_parts_returned[carrier_index]

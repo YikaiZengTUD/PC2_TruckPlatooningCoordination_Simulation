@@ -17,7 +17,10 @@ class Carrier:
         self.consensus_range_sec        = consensus_range
         self.consensus_resolution_sec   = int(consensus_range/consensus_table.shape[0])
 
-        self.average_intermedia = np.zeros(self.consensus_table.shape)
+        self.average_intermedia          = np.zeros(self.consensus_table.shape)
+        self.previous_average_intermedia = np.zeros(self.consensus_table.shape)
+        self.validate_counter            = np.zeros(self.consensus_table.shape)
+        self.stable_threshold            = 0.002
 
         self.row_part1 = None
         self.row_part2 = None
@@ -87,6 +90,9 @@ class Carrier:
         # Now remove the first row of the stacked array
         if self.average_intermedia.shape[0] > 1:  # Check if there are at least two rows to remove one
             self.average_intermedia = self.average_intermedia[1:]  # Removes the first row
+
+        self.previous_average_intermedia = np.vstack((self.previous_average_intermedia,self.latest_row))
+        self.previous_average_intermedia = self.previous_average_intermedia[1:]
     
     def select_a_com_slot(self,options:int):
         self.com_slot = random.randint(1,options)
@@ -136,19 +142,31 @@ class Carrier:
 
 
     def check_validate_intermedia(self, public_key: int):
-        # Calculate the decode_raw array
-        decode_raw = (self.average_intermedia * self.carrier_qty) % public_key
+        stable_rounds_settings = 5
 
-        # Condition to check closeness to integer
-        is_close_to_int = np.abs(decode_raw - np.round(decode_raw)) < 0.05  # Tolerance for closeness
+        diff = np.abs(self.average_intermedia - self.previous_average_intermedia)
+        is_stable = diff <= self.stable_threshold
 
-        # Check if each element is less than 15 and close to an integer
-        is_valid = np.logical_and(decode_raw < 15, is_close_to_int)
-        # Prepare the values to be updated: round only the valid entries
-        values_to_update = np.where(is_valid, np.round(decode_raw), self.consensus_table)
-        # Update consensus_table only where is_valid is True
-        np.copyto(self.consensus_table, values_to_update)
-    
+        self.validate_counter[is_stable] += 1
+        self.validate_counter[~is_stable] = 0
+
+        stable_long_enough = self.validate_counter >= stable_rounds_settings
+
+        # only for those stable long enough do * self.carrier_qty
+        decode_raw = np.zeros_like(self.average_intermedia)
+        if np.any(stable_long_enough):
+
+            decode_raw[stable_long_enough] = (self.average_intermedia[stable_long_enough] * self.carrier_qty)
+            decode_round = np.round(decode_raw)
+            is_close_to_int = np.abs(decode_raw - decode_round ) < 0.05
+            decode_round = decode_round % public_key
+            is_valid = np.logical_and(stable_long_enough, is_close_to_int)
+            values_to_update = np.where(is_valid, decode_round, self.consensus_table)
+            np.copyto(self.consensus_table, values_to_update)
+
+        self.previous_average_intermedia = np.copy(self.average_intermedia)
+
+
     def update_consensus_table(self):
         # this function is called everytime the ego plan table is updated when the table needs rolling
         # Ensure the tables are initialized and not empty

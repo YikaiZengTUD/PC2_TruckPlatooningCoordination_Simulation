@@ -9,7 +9,9 @@ from virtual_env.virtual_handler import VirtualHandler
 from carrier.truck import Truck
 from carrier.carrier import Carrier
 from thridparty.encryptor import Encryptor
+
 import json
+import matplotlib.pyplot as plt
 
 ''' Parameter Settings'''
 
@@ -26,6 +28,10 @@ com_slots               = 100
 
 public_key              = 103
 
+# debug settings
+slice_history = []
+select_index = (0,0)
+true_average = 0
 ''' Instantiations '''
 
 print('Instantiations Process Start')
@@ -129,6 +135,7 @@ print("Third party encryption service start")
 depart_info          = {}
 depart_info_this_row = {}
 
+
 for time_ms in tqdm(range(0, int(total_length_ms), step_length_ms)):
     
     '''
@@ -159,6 +166,16 @@ for time_ms in tqdm(range(0, int(total_length_ms), step_length_ms)):
             for _carrier in carrier_list:
                 _carrier.get_secrets_pieces(EP.return_carrier_parts(carrier_index=_carrier.carrier_index))
                 
+            ''' Debug process'''
+
+            # for _carrier in carrier_list:
+                
+            #     _history = []
+            #     _history.append(_carrier.average_intermedia[select_index[0],select_index[1]])
+            #     true_average += _history[0]
+            #     slice_history.append(_history)
+            
+            # print('True average values of selected index:',true_average/len(carrier_list))
         else:
             if len(depart_info_this_row) > 0:
                 depart_info[CLK.cur_plan_base] = depart_info_this_row
@@ -234,6 +251,13 @@ for time_ms in tqdm(range(0, int(total_length_ms), step_length_ms)):
         _carrier.check_validate_intermedia(public_key)
     # NOTE: Too slow, make it event trigger (?)
     
+    '''Debug functions'''
+    
+    # _history = []
+    # for _order,_carrier in enumerate(carrier_list):
+    #     slice_history[_order].append(_carrier.average_intermedia[select_index[0],select_index[1]])
+    
+
     # Decision making process
 
     # we need to check if this a timing of arrival a hub - when decsion is made
@@ -302,3 +326,12 @@ def save_wait_plans(carrier_list, file_path):
     print(f"Wait plans saved to {file_path}")
 
 save_wait_plans(carrier_list,'result/wait_plan.json')
+
+
+# for i in range(len(carrier_list)):
+#     plt.plot(slice_history[i], label=f'Agent {i}')
+
+# plt.xlabel('Iteration')
+# plt.ylabel('Value')
+# plt.title('Changes in Agent Values Over Iterations (First Run)')
+# plt.show()
