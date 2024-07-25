@@ -15,11 +15,12 @@ class Carrier:
         self.ego_table_record   = self.ego_table
 
         self.consensus_range_sec        = consensus_range
-        self.consensus_resolution_sec   = int(consensus_range/consensus_table.shape[0])
+        if not consensus_table == None:
+            self.consensus_resolution_sec   = int(consensus_range/consensus_table.shape[0])
 
-        self.average_intermedia          = np.zeros(self.consensus_table.shape)
-        self.previous_average_intermedia = np.zeros(self.consensus_table.shape)
-        self.validate_counter            = np.zeros(self.consensus_table.shape)
+            self.average_intermedia          = np.zeros(self.consensus_table.shape)
+            self.previous_average_intermedia = np.zeros(self.consensus_table.shape)
+            self.validate_counter            = np.zeros(self.consensus_table.shape)
         self.stable_threshold            = 0.002
 
         self.row_part1 = None
