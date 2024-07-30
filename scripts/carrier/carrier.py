@@ -3,7 +3,44 @@ import numpy as np
 from datetime import datetime,timedelta
 import networkx as nx
 import random
-from numba import njit
+from numba import njit,prange
+
+
+# @njit(parallel=True)
+def numba_check_validate_intermedia(average_intermedia, previous_average_intermedia, stable_threshold, carrier_qty, public_key, validate_counter, consensus_table, stable_rounds_settings=5):
+
+    rows, cols = average_intermedia.shape
+    diff = np.abs(average_intermedia - previous_average_intermedia)
+    is_stable = diff <= stable_threshold
+
+    for i in prange(rows):
+        for j in prange(cols):
+            if is_stable[i, j]:
+                validate_counter[i, j] += 1
+            else:
+                validate_counter[i, j] = 0
+
+    stable_long_enough = validate_counter >= stable_rounds_settings
+
+    if np.any(stable_long_enough):
+        decode_raw = np.zeros_like(average_intermedia)
+        for i in prange(rows):
+            for j in prange(cols):
+                if stable_long_enough[i, j]:
+                    decode_raw[i, j] = average_intermedia[i, j] * carrier_qty
+        decode_round = np.round(decode_raw)
+        is_close_to_int = np.abs(decode_raw - decode_round) < 0.05
+        decode_round = decode_round % public_key
+
+        for i in prange(rows):
+            for j in prange(cols):
+                if stable_long_enough[i, j] and is_close_to_int[i, j]:
+                    consensus_table[i, j] = decode_round[i, j]
+
+    for i in prange(rows):
+        for j in prange(cols):
+            previous_average_intermedia[i, j] = average_intermedia[i, j]
+
 class Carrier:
 
     def __init__(self,carrier_index:int,consensus_table:np.array,consensus_range:int) -> None:
@@ -143,29 +180,14 @@ class Carrier:
             raise ValueError('insufficient amount of connected carriers')
         self.connected_peer_qty = peer_qty
 
-    @njit
     def check_validate_intermedia(self, public_key: int):
-        stable_rounds_settings = 5
-
-        diff = np.abs(self.average_intermedia - self.previous_average_intermedia)
-        is_stable = diff <= self.stable_threshold
-
-        self.validate_counter = np.where(is_stable, self.validate_counter + 1, 0)
-        stable_long_enough = self.validate_counter >= stable_rounds_settings
-
-        # only for those stable long enough do * self.carrier_qty
-        #  decode_raw = np.zeros_like(self.average_intermedia)
-        if np.any(stable_long_enough):
-            decode_raw = np.zeros_like(self.average_intermedia)
-            decode_raw[stable_long_enough] = (self.average_intermedia[stable_long_enough] * self.carrier_qty)
-            decode_round = np.round(decode_raw)
-            is_close_to_int = np.abs(decode_raw - decode_round ) < 0.05
-            decode_round = decode_round % public_key
-            is_valid = np.logical_and(stable_long_enough, is_close_to_int)
-            values_to_update = np.where(is_valid, decode_round, self.consensus_table)
-            np.copyto(self.consensus_table, values_to_update)
-
-        self.previous_average_intermedia = np.copy(self.average_intermedia)
+        numba_check_validate_intermedia(self.average_intermedia, 
+                                        self.previous_average_intermedia, 
+                                        self.stable_threshold, 
+                                        self.carrier_qty, 
+                                        public_key, 
+                                        self.validate_counter, 
+                                        self.consensus_table)
 
 
     def update_consensus_table(self):
