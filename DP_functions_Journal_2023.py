@@ -146,38 +146,32 @@ def data_DP_graph_new(v_hub_ta_td_s2_c, OD_jun_travel, i):
     # calculate the reward when joining different platoons
     # 1. define the fleet of a given vehicle
     def fleet_v(i):
-    # vehicle 0-4999, fleet 1-855
-        # small size fleet Type 1: where each fleet has only one truck (total: 325 trucks, f1-f325)
-        if i>=0 and i<=324:
-            f_i=i+1
-        # small-size fleet Type 2: where each fleet has 3 trucks (total: 1086 trucks, f326-f687)
-        if i>=325 and i<=1410:
-            f_i=326+int((i-325)/3)
+    # vehicle 0-999, fleet 1-755
+        f_i = 0
+        if i <= 747:
+            f_i = i + 1
         
-        # small-size fleet Type 3: where each fleet has 7 trucks (total: 560 trucks, f688-767)
-        if i>=1411 and i<=1970:
-            f_i=688+int((i-1411)/7)
+        if i > 747 and i <= 750:
+            f_i = 749
         
-        # medium-size fleet Type 4: where each fleet has 15 trucks (total:735 trucks, f768-f816)
-        if i>=1971 and i<=2705: 
-            f_i=768+int((i-1971)/15)
+        if i > 750 and i <= 753:
+            f_i = 750
         
-        # medium-size fleet Type 5: where each fleet has 34 trucks (total: 918 trucks, f817-f843)
-        if i>=2706 and i<=3623:
-            f_i=817+int((i-2706)/34)
+        if i > 753 and i <= 768:
+            f_i = 751
         
-        # medium-size fleet Type 6: where each fleet has 74 trucks (total: 592 trucks, f844-f851)
-        if i>=3624 and i<=4215:
-            f_i=844+int((i-3624)/74)
+        if i > 768 and i <= 783:
+            f_i = 752
         
-        # large-size fleet Type 7: where each fleet has 148 trucks (total: 444 trucks, f852-f854)
-        if i>=4216 and i<=4659:
-            f_i=852+int((i-4216)/148)
+        if i > 783 and i <= 817:
+            f_i = 753
         
-        # lareg-size fleet Type 8: where each fleet has 340 trucks (total: 340 trucks)
-        if i>=4660 and i<=4999:
-            f_i=855
-            
+        if i > 817 and i <= 851:
+            f_i = 754
+        
+        if i > 851:
+            f_i = 755
+
         return f_i
         
     f_i=fleet_v(i) # the fleet that vehicle i belongs to
