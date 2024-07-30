@@ -3,6 +3,7 @@ import numpy as np
 from datetime import datetime,timedelta
 import networkx as nx
 import random
+from numba import njit
 class Carrier:
 
     def __init__(self,carrier_index:int,consensus_table:np.array,consensus_range:int) -> None:
@@ -21,6 +22,7 @@ class Carrier:
             self.average_intermedia          = np.zeros(self.consensus_table.shape)
             self.previous_average_intermedia = np.zeros(self.consensus_table.shape)
             self.validate_counter            = np.zeros(self.consensus_table.shape)
+
         self.stable_threshold            = 0.002
 
         self.row_part1 = None
@@ -141,22 +143,20 @@ class Carrier:
             raise ValueError('insufficient amount of connected carriers')
         self.connected_peer_qty = peer_qty
 
-
+    @njit
     def check_validate_intermedia(self, public_key: int):
         stable_rounds_settings = 5
 
         diff = np.abs(self.average_intermedia - self.previous_average_intermedia)
         is_stable = diff <= self.stable_threshold
 
-        self.validate_counter[is_stable] += 1
-        self.validate_counter[~is_stable] = 0
-
+        self.validate_counter = np.where(is_stable, self.validate_counter + 1, 0)
         stable_long_enough = self.validate_counter >= stable_rounds_settings
 
         # only for those stable long enough do * self.carrier_qty
-        decode_raw = np.zeros_like(self.average_intermedia)
+        #  decode_raw = np.zeros_like(self.average_intermedia)
         if np.any(stable_long_enough):
-
+            decode_raw = np.zeros_like(self.average_intermedia)
             decode_raw[stable_long_enough] = (self.average_intermedia[stable_long_enough] * self.carrier_qty)
             decode_round = np.round(decode_raw)
             is_close_to_int = np.abs(decode_raw - decode_round ) < 0.05
