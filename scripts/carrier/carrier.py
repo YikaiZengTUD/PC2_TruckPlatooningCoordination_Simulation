@@ -6,7 +6,7 @@ import random
 from numba import njit,prange
 
 
-# @njit(parallel=True)
+@njit(parallel=True)
 def numba_check_validate_intermedia(average_intermedia, previous_average_intermedia, stable_threshold, carrier_qty, public_key, validate_counter, consensus_table, stable_rounds_settings=5):
 
     rows, cols = average_intermedia.shape
