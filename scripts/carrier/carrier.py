@@ -16,7 +16,7 @@ class Carrier:
         self.ego_table_record   = self.ego_table
 
         self.consensus_range_sec        = consensus_range
-        if not consensus_table == None:
+        if not consensus_table.any() == None:
             self.consensus_resolution_sec   = int(consensus_range/consensus_table.shape[0])
 
             self.average_intermedia          = np.zeros(self.consensus_table.shape)
