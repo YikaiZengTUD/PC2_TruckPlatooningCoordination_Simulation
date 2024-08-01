@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 
 ''' Parameter Settings'''
 
-step_length_ms                    = 1000  # period for the carrier to perform communications
+step_length_ms                    = 2000  # period for the carrier to perform communications
 
 consensus_table_resolution_second = 10
 consensus_table_range_second      = 3600
@@ -42,7 +42,7 @@ geo_map = GeoMap()
 # Import data from data files
 
 [geo_map.hub_list,travel_path_dict,travel_time_dict,geo_map.edge_list,start_time_dict] = import_data_from(
-    filepath            = 'testdata',
+    filepath            = 'data',
     node_list_file      = 'OD_hubs_new_1000Trucks',
     travel_time_file    = 'OD_hubs_travel_1000Trucks',
     start_time_file     = 'vehicle_arr_dep_hubs0_1000Trucks'
