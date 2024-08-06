@@ -1,0 +1,7 @@
+/scripts/__pycache__/
+/__pycache__/
+/scripts/playground.py
+/start_configuration.csv
+/result/
+*.pyc
+__pycache__/
