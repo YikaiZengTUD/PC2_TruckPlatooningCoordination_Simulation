@@ -3,6 +3,7 @@ import warnings
 from datetime import datetime, timedelta
 import networkx as nx
 import time
+
 class Truck:
 
     def __init__(self,truck_index:int,task_by_hub_index:list,travel_time_list:list,start_time:datetime) -> None:
@@ -76,7 +77,7 @@ class Truck:
                 continue
             
 
-            t_gap = self.wait_plan[_hub_order] + self.travel_time[_hub_order-1]
+            t_gap = self.wait_plan[_hub_order-1] + self.travel_time[_hub_order-1]
             t_a = t_last_a + timedelta(seconds=t_gap)
 
             t_a_list.append(t_a)
@@ -306,7 +307,7 @@ class Truck:
 
         return cost_edge
 
-    def generate_dp_graph(self,options:dict,now_time:datetime,step_ms:int) -> nx.DiGraph:
+    def generate_dp_graph(self,options:dict,now_time:datetime,step_ms:int,table_resolution:int) -> nx.DiGraph:
 
         graph = nx.DiGraph()
         edges_to_decide = self.future_edges(now_time,step_ms)
@@ -350,6 +351,7 @@ class Truck:
             for index,opt in enumerate(time_options):
                 ego_amount = ego_qty[index]
                 agg_amount = agg_qty[index]
+
 
                 dep_last_node = opt - timedelta(seconds=t_travel)
                 graph.add_node(dp_id,time_dep_lastnode=dep_last_node,time_dep=opt,edge_index=edge,ego_veh=ego_amount,agg_veh=agg_amount)
@@ -397,13 +399,15 @@ class Truck:
 
                     #  if the time_dep_lastnode of dp_node_end >= the time_dep of dp_node_start, there should be an edge in between
                     # a attribute 'wait_time' = time_dep_lastnode - time_dep converted to seconds from timedelta
-                    time_dep_lastnode = graph.nodes[dp_node_end]['time_dep_lastnode']
+                    time_raw = graph.nodes[dp_node_end]['time_dep_lastnode']
+                    # time_dep_lastnode = self._round_continuous_time_in_grid(table_resolution,graph.nodes[dp_node_end]['time_dep_lastnode'])
+                    time_dep_lastnode = time_raw
                     time_dep          = graph.nodes[dp_node_start]['time_dep']
 
                     ego_amount = graph.nodes[dp_node_end].get('ego_veh', 0)
                     agg_amount = graph.nodes[dp_node_end].get('agg_veh', 0)
                     if time_dep_lastnode >= time_dep:
-                        wait_time = (time_dep_lastnode - time_dep).total_seconds()
+                        wait_time = (time_raw - time_dep).total_seconds()
                         cost      = self.caculate_weight_cost(ego_amount,agg_amount,wait_time,t_cost)
                         graph.add_edge(dp_node_start, dp_node_end, wait_time=wait_time,weight=cost)
 
@@ -443,6 +447,28 @@ class Truck:
             return True
         else:
             return False
+        
+    def _round_continuous_time_in_grid(self, resolution_sec: int, raw_time: datetime) -> datetime:
+        # Calculate the number of seconds from the start of the day, including microseconds
+        total_seconds = raw_time.hour * 3600 + raw_time.minute * 60 + raw_time.second + raw_time.microsecond / 1_000_000
+
+        # Calculate the remainder when dividing by resolution_sec
+        remainder = total_seconds % resolution_sec
+
+        # If the remainder is zero, return the original time (preserving microseconds)
+        if remainder == 0:
+            return raw_time  # Reset microseconds to zero
+
+        # Calculate the rounded seconds
+        rounded_seconds = total_seconds + (resolution_sec - remainder)
+
+        # Calculate the number of seconds past midnight for the rounded time
+        rounded_time_past_midnight = timedelta(seconds=rounded_seconds)
+
+        # Combine the rounded seconds with the date of raw_time
+        rounded_time = datetime.combine(raw_time.date(), datetime.min.time()) + rounded_time_past_midnight
+
+        return rounded_time
 
 if __name__ == "__main__":
     T = Truck(

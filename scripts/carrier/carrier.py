@@ -1,7 +1,6 @@
 from carrier.truck import Truck
 import numpy as np
 from datetime import datetime,timedelta
-import networkx as nx
 import random
 from numba import njit,prange
 
@@ -354,4 +353,22 @@ class Carrier:
         self.consensus_table    += delta
         self.average_intermedia += delta
 
+    def reverse_gridtime_2_raw_time(self,grid_time:datetime,edge_index:int,asking_truck:int,table_resolution:int) -> datetime:
+        t_d_candiate_list = []
+        for _truck in self.truck_list:
+            if _truck.truck_index == asking_truck:
+                continue
+            if edge_index in _truck.edge_list:
+                # this may be concerned
+                t_d_list = _truck.generate_depart_time_list()
 
+                t_d_candiate = t_d_list[_truck.edge_list.index(edge_index)]
+
+                if grid_time >= t_d_candiate and (grid_time - timedelta(seconds=table_resolution)) < t_d_candiate:
+
+                    t_d_candiate_list.append(t_d_candiate)
+                
+        if len(t_d_candiate_list) == 0:         
+            raise ValueError('fail to find the raw depart time')
+        else:
+            return max(t_d_candiate_list)

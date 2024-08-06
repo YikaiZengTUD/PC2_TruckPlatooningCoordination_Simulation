@@ -177,9 +177,9 @@ for time_ms in tqdm(range(0, int(total_length_ms), step_length_ms)):
             
             # print('True average values of selected index:',true_average/len(carrier_list))
         else:
-            if len(depart_info_this_row) > 0:
-                depart_info[CLK.cur_plan_base] = depart_info_this_row
-            depart_info_this_row = {}
+            # if len(depart_info_this_row) > 0:
+            #     depart_info[CLK.current_clk - timedelta(seconds=consensus_table_resolution_second)] = depart_info_this_row
+            # depart_info_this_row = {}
             CLK.cur_plan_base = CLK.current_clk - timedelta(seconds=consensus_table_resolution_second)
             # only the latest row requires updating
             EP.clear_secret_cache()
@@ -268,8 +268,6 @@ for time_ms in tqdm(range(0, int(total_length_ms), step_length_ms)):
             if _truck.is_arrival_moment(CLK.current_clk,1e-3*step_length_ms):
                 # this is when a truck arrives and needs making decisons
                 # generate the dp graph and search weight cheapest trips
-                # if _truck.truck_index == 847:
-                #     print('pause')
                 edge_to_decide = _truck.future_edges(CLK.current_clk,step_length_ms)
                 decide_options_on_edge = {}
                 for _edge in edge_to_decide:
@@ -277,11 +275,26 @@ for time_ms in tqdm(range(0, int(total_length_ms), step_length_ms)):
                     # steps presenting truck <-> carrier communication
                     ego_options = _carrier.answer_samecarrier_options(_edge,time_window,consensus_table_resolution_second,_truck.truck_index)
                     agg_options = _carrier.answer_carrieragg_options(_edge,time_window,CLK.cur_plan_base,consensus_table_resolution_second,_truck.truck_index)
+                    # FIX: check if options are the same
+                    _time_opt = ego_options[0]
+                    for _order,_time in enumerate(_time_opt):
+                        if _time in agg_options[0]:
+                            _ego_order = _order
+                            _agg_order = agg_options[0].index(_time)
+                            if ego_options[1][_ego_order] == agg_options[1][_agg_order]:
+                                # this is a fully ego platoon, no need to move to the grid point.
+                                raw_time = _carrier.reverse_gridtime_2_raw_time(_time,_edge,_truck.truck_index,consensus_table_resolution_second)
+                                if raw_time == _time:
+                                    continue
+                                else:
+                                    ego_options[0][_ego_order] = raw_time
+                                    agg_options[0][_agg_order] = raw_time
+
                     combined_options = _truck.validate_options_from_two_sources(ego_options,agg_options,CLK.cur_plan_base,consensus_table_range_second)
                     # truck actions
                     decide_options_on_edge[_edge] = combined_options
                 # generate dp graph based on these options
-                _truck.dp_graph = _truck.generate_dp_graph(decide_options_on_edge,CLK.current_clk,step_length_ms)
+                _truck.dp_graph = _truck.generate_dp_graph(decide_options_on_edge,CLK.current_clk,step_length_ms,consensus_table_resolution_second)
                 dp_path         = _truck.find_shortest_path(_truck.dp_graph)
                 if len(dp_path) == 0:
                     raise ValueError('Path Error')
@@ -300,10 +313,15 @@ for time_ms in tqdm(range(0, int(total_length_ms), step_length_ms)):
             is_departing, edge_to_depart = _truck.is_departing_moment(CLK.current_clk,1e-3*step_length_ms)
                 # which edge this is 
             if is_departing:
+
                 if edge_to_depart not in depart_info_this_row:
                     depart_info_this_row[edge_to_depart] = []
                 depart_info_this_row[edge_to_depart].append(_truck.truck_index)
-
+    
+    if (time_ms/1000) % consensus_table_resolution_second == 0 and time_ms > 0:
+        if len(depart_info_this_row) > 0:
+            depart_info[CLK.current_clk - timedelta(seconds=consensus_table_resolution_second)] = depart_info_this_row
+        depart_info_this_row = {}
     CLK.clk_tick(step_length_ms)
 
 def serialize_depart_info(depart_info):
