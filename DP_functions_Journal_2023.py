@@ -138,8 +138,10 @@ def data_DP_graph_new(v_hub_ta_td_s2_c, OD_jun_travel, i):
     
     DP_graph={}
     DP_graph[i]={}
-    epsilon=0.07 #ser/s constant: waiting cost, i.e., 180sek/h
-    xi=0.016 # ser/s constant: platooning reward
+    #epsilon=0.07 #ser/s constant: waiting cost, i.e., 180sek/h
+    #xi=0.016 # ser/s constant: platooning reward
+    epsilon = 25/3600 # euro/sec
+    xi = 5.6/3600     # euro/sec
     h_end=list(v_hub_ta_td_s2_c[i].keys())[-1] # the destination 
    
     
