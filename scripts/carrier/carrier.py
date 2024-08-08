@@ -306,9 +306,10 @@ class Carrier:
             
         _gap2 = (time_window_end - table_base).total_seconds()
         row_2 = int(_gap2 / row_resolution_sec)
-        if _gap2 % row_resolution_sec == 0:
-            row_2 = row_2 - 1
-        if row_2 <= row_1:
+        # if _gap2 % row_resolution_sec == 0:
+        #     row_2 = row_2 - 1
+        row_2 = row_2 - 1
+        if row_2 < row_1:
             raise ValueError("Incorrect time window projection on consensus table")
         row_2 = min(row_2,n_of_row-1)
 
