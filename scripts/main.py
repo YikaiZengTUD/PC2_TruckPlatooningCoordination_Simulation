@@ -139,124 +139,21 @@ depart_info_this_row = {}
 for time_ms in tqdm(range(0, int(total_length_ms), step_length_ms)):
     
     '''
-    Assumption 1: that all carriers are online all time, as a service user and a contributor
-    Assumption 2: there is a service provider that provide a fully connected network
-    Assumption 3: each communication period, each carrier is able to perform an attempt of communication
-    Assumption 4: the period is divided into serval slots, and a carrier which chose a random slot to communicate, if the targeted carrier happens to be in communication as well, 
-    this attempt is aborted
-    Assumption 5: the amount of carriers are known to all as a common prior knowledge
+    In this branch, we consider an ideal communication process that directly transmit information perfeactly for all carriers
     '''
+    
+    ego_table_sum = np.zeros(shape=(row_of_consensus,len(geo_map.edge_list)))
+    for _carrier in carrier_list:
+        _carrier.ego_table = _carrier.load_plan_into_ego_matrix(table_base=CLK.cur_plan_base)
+        ego_table_sum += _carrier.ego_table
 
-    # Prepare phase
-
-    # if this is a clock that a new row of the consensus table is to be updated
-
-    # it is not necessary for time_ms = 0 since the plan has just been loaded
+    for _carrier in carrier_list:
+        _carrier.consensus_table = ego_table_sum
 
     if (time_ms/1000) % consensus_table_resolution_second == 0:
 
-        if time_ms == 0:
-            # this is the starting point, a full scale encrpytion is needed
-            for _carrier in carrier_list:
-                _carrier.divide_secrets_into_two_parts(public_key)
-                EP.record_secret_part(_carrier.secret_part1,_carrier.carrier_index)
-            
-            EP.process_secret_parts()
-
-            for _carrier in carrier_list:
-                _carrier.get_secrets_pieces(EP.return_carrier_parts(carrier_index=_carrier.carrier_index))
-                
-            ''' Debug process'''
-
-            # for _carrier in carrier_list:
-                
-            #     _history = []
-            #     _history.append(_carrier.average_intermedia[select_index[0],select_index[1]])
-            #     true_average += _history[0]
-            #     slice_history.append(_history)
-            
-            # print('True average values of selected index:',true_average/len(carrier_list))
-        else:
-            # if len(depart_info_this_row) > 0:
-            #     depart_info[CLK.current_clk - timedelta(seconds=consensus_table_resolution_second)] = depart_info_this_row
-            # depart_info_this_row = {}
-            CLK.cur_plan_base = CLK.current_clk - timedelta(seconds=consensus_table_resolution_second)
-            # only the latest row requires updating
-            EP.clear_secret_cache()
-            for _carrier in carrier_list:
-                _carrier.update_ego_table(CLK.cur_plan_base)
-                # the update is also required for the self.consensus table
-                _carrier.update_consensus_table()
-                _carrier.process_update_row(public_key)
-                EP.record_secret_part(_carrier.row_part1,_carrier.carrier_index)
-            EP.process_secret_parts()
-            for _carrier in carrier_list:
-                _carrier.latest_row = _carrier.row_part2 + EP.return_carrier_parts(_carrier.carrier_index)
-                _carrier.update_average_intermedia()
-
-            # record depart information
-                
-    # Information exchange phase
-
-    # each carrier get a communication slot 
-    # this is to reduce the conflicts in communication
-    comun_schedule_by_carrier = {}
-
-    for _carrier in carrier_list:
-        _carrier.select_a_com_slot(com_slots)
-        _carrier.in_commun = False
-    
-        comun_schedule_by_carrier[_carrier.carrier_index] = _carrier.com_slot
-
-    inverse_comun_schedule = {}
-    for carrier_index, com_slot in comun_schedule_by_carrier.items():
-        if com_slot not in inverse_comun_schedule:
-            inverse_comun_schedule[com_slot] = []
-        inverse_comun_schedule[com_slot].append(carrier_index)
-    
-    for com_slot, this_slot_carrier_list in inverse_comun_schedule.items():
-        concerned_carrier_list = []
-        concerned_carrier_list = this_slot_carrier_list.copy()
-
-        for _carrier_index in this_slot_carrier_list:
-            _carrier = carrier_list[carrier_index_list.index(_carrier_index)]
-            _carrier.in_commun  = True
-            _com_target_index   = _carrier.select_a_random_carrier(carrier_index_list)
-            _tar_carrier = carrier_list[carrier_index_list.index(_com_target_index)]
-
-            if _tar_carrier.carrier_index in this_slot_carrier_list:
-                _carrier.in_commun = False
-                continue
-                # this carrier abort this trial because the selected carrier is also in communication 
-            
-            if _tar_carrier.in_commun:
-                _carrier.in_commun = False
-                continue
-
-            _tar_carrier.in_commun = True
-
-            concerned_carrier_list.append(_tar_carrier.carrier_index)
-
-            avg = (_tar_carrier.average_intermedia + _carrier.average_intermedia)/2
-            _tar_carrier.average_intermedia = avg.copy()
-            _carrier.average_intermedia = avg.copy()
-
-        for _carrier_index in concerned_carrier_list:
-            _carrier = carrier_list[carrier_index_list.index(_carrier_index)]
-            _carrier.in_commun = False
-
-    # a carrier will be making decision with based on self.consensus_table, 
-    # therefore, they would hold a latest reliable table for making decison since the consensus may still remain unreliable
-    for _carrier in carrier_list:
-        _carrier.check_validate_intermedia(public_key)
-    # NOTE: Too slow, make it event trigger (?)
-    
-    '''Debug functions'''
-    
-    # _history = []
-    # for _order,_carrier in enumerate(carrier_list):
-    #     slice_history[_order].append(_carrier.average_intermedia[select_index[0],select_index[1]])
-    
+        CLK.cur_plan_base = CLK.current_clk - timedelta(seconds=consensus_table_resolution_second)
+        
 
     # Decision making process
 
@@ -304,7 +201,7 @@ for time_ms in tqdm(range(0, int(total_length_ms), step_length_ms)):
                     delta = ego_table - _carrier.ego_table
                     _carrier.ego_table = ego_table
                     _carrier.consensus_table    += delta
-                    _carrier.average_intermedia += delta
+                    # _carrier.average_intermedia += delta
     
     for _carrier in carrier_list:
         for _truck in _carrier.truck_list:

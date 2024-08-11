@@ -10,3 +10,6 @@ conda env create -f environment.yml
 ```
 after you set this folder as your working directory.
 
+# About this branch
+
+This branch is a test that removing the privacy protecting part of the algoirthm to evaluate its performance, or is there any fuel savings potential lost due to the introduction of the privacy protection
