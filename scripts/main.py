@@ -141,7 +141,9 @@ for time_ms in tqdm(range(0, int(total_length_ms), step_length_ms)):
     '''
     In this branch, we consider an ideal communication process that directly transmit information perfeactly for all carriers
     '''
-    
+    if (time_ms/1000) % consensus_table_resolution_second == 0:
+
+        CLK.cur_plan_base = CLK.current_clk - timedelta(seconds=consensus_table_resolution_second)
     ego_table_sum = np.zeros(shape=(row_of_consensus,len(geo_map.edge_list)))
     for _carrier in carrier_list:
         _carrier.ego_table = _carrier.load_plan_into_ego_matrix(table_base=CLK.cur_plan_base)
@@ -150,9 +152,7 @@ for time_ms in tqdm(range(0, int(total_length_ms), step_length_ms)):
     for _carrier in carrier_list:
         _carrier.consensus_table = ego_table_sum
 
-    if (time_ms/1000) % consensus_table_resolution_second == 0:
 
-        CLK.cur_plan_base = CLK.current_clk - timedelta(seconds=consensus_table_resolution_second)
         
 
     # Decision making process
